@@ -9,8 +9,8 @@ struct SettingsView: View {
     @AppStorage("resizeStep") private var resizeStep: Double = 10.0
     @AppStorage("brightnessThreshold") private var brightnessThreshold: Double = 0.5
     @AppStorage("filterMode") private var filterModeRaw: String = FilterMode.threshold.rawValue
-    @AppStorage("mirrorHorizontal") private var mirrorHorizontal: Bool = false
-    @AppStorage("mirrorVertical") private var mirrorVertical: Bool = false
+    @AppStorage("horizontalMirrorMode") private var horizontalMirrorModeRaw: String = AppSettings.shared.horizontalMirrorMode.rawValue
+    @AppStorage("verticalMirrorMode") private var verticalMirrorModeRaw: String = AppSettings.shared.verticalMirrorMode.rawValue
     @AppStorage("filenameFormat") private var filenameFormat: String = "pixelatolor_{date}_{time}"
     @State private var savePathDisplay: String = ""
     @State private var isRecordingHotkey: Bool = false
@@ -45,7 +45,7 @@ struct SettingsView: View {
             hotkeyDisplayString = AppSettings.shared.hotkeyDisplayString
             updateFilenamePreview()
         }
-        .onChange(of: filenameFormat) { _, _ in
+        .onChange(of: filenameFormat) { _ in
             updateFilenamePreview()
         }
         .onDisappear {
@@ -96,7 +96,7 @@ struct SettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 150)
+                    .frame(width: 180)
                 }
             }
             .padding(10)
@@ -108,16 +108,24 @@ struct SettingsView: View {
         // Mirror
         GroupBox {
             VStack(spacing: 10) {
-                settingsRow("Horizontal Flip") {
-                    Toggle("", isOn: $mirrorHorizontal)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
+                settingsRow("Horizontal Mirror") {
+                    Picker("", selection: $horizontalMirrorModeRaw) {
+                        ForEach(HorizontalMirrorMode.allCases, id: \.rawValue) { mode in
+                            Text(mode.displayName).tag(mode.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 140)
                 }
                 Divider()
-                settingsRow("Vertical Flip") {
-                    Toggle("", isOn: $mirrorVertical)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
+                settingsRow("Vertical Mirror") {
+                    Picker("", selection: $verticalMirrorModeRaw) {
+                        ForEach(VerticalMirrorMode.allCases, id: \.rawValue) { mode in
+                            Text(mode.displayName).tag(mode.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 140)
                 }
             }
             .padding(10)
@@ -216,13 +224,15 @@ struct SettingsView: View {
                 Divider()
                 shortcutRow("+ / -", "Adjust threshold")
                 Divider()
-                shortcutRow("Space", "Toggle inversion")
+                shortcutRow("Shift + arrows / +/-", "Larger jumps")
                 Divider()
-                shortcutRow("H", "Toggle horizontal flip")
+                shortcutRow("Space", "Toggle negative")
                 Divider()
-                shortcutRow("V", "Toggle vertical flip")
+                shortcutRow("H", "Cycle horizontal mirror")
                 Divider()
-                shortcutRow("1-6", "Select filter mode")
+                shortcutRow("V", "Cycle vertical mirror")
+                Divider()
+                shortcutRow("1-8", "Select filter mode")
                 Divider()
                 shortcutRow("F", "Cycle filter mode")
                 Divider()

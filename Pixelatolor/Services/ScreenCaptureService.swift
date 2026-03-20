@@ -5,6 +5,10 @@ final class ScreenCaptureService {
     /// Window number to exclude from capture (the overlay window)
     var excludeWindowNumber: Int = 0
 
+    static func currentMouseLocation() -> NSPoint {
+        return NSEvent.mouseLocation
+    }
+
     /// Captures a region of the screen, excluding the overlay window.
     func capture(rect: CGRect) -> CGImage? {
         // optionOnScreenBelowWindow captures everything on screen below (and not including)

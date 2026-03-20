@@ -1,20 +1,21 @@
 import AppKit
 import Combine
 
-@Observable
-final class CaptureViewModel {
-    var gridState = GridState(size: 16)
-    var gridSize: Int = 16
-    var viewportSize: CGFloat = 200
-    var brightnessThreshold: Float = 0.5
-    var filterMode: FilterMode = .threshold
-    var isActive: Bool = false
-    var lastSavedURL: URL?
+final class CaptureViewModel: ObservableObject {
+    @Published var gridState = GridState(size: 16)
+    @Published var gridSize: Int = 16
+    @Published var viewportSize: CGFloat = 200
+    @Published var brightnessThreshold: Float = 0.5
+    @Published var filterMode: FilterMode = .threshold
+    @Published var isInverted: Bool = false
+    @Published var horizontalMirrorMode: HorizontalMirrorMode = .none
+    @Published var verticalMirrorMode: VerticalMirrorMode = .none
+    @Published var isActive: Bool = false
+    @Published var lastSavedURL: URL?
 
     private let captureService = ScreenCaptureService()
     private var timer: DispatchSourceTimer?
     private let captureQueue = DispatchQueue(label: "com.pixelatolor.capture", qos: .userInteractive)
-    private var mouseLocation: NSPoint = .zero
 
     var overlayWindowNumber: Int {
         get { captureService.excludeWindowNumber }
@@ -27,13 +28,15 @@ final class CaptureViewModel {
         viewportSize = settings.viewportSize
         brightnessThreshold = settings.brightnessThreshold
         filterMode = settings.filterMode
+        horizontalMirrorMode = settings.horizontalMirrorMode
+        verticalMirrorMode = settings.verticalMirrorMode
     }
 
     /// Prepares settings and state. Call startCapturing() separately after the window is ready.
     func activate() {
         loadSettings()
+        isInverted = false
         isActive = true
-        mouseLocation = NSEvent.mouseLocation
     }
 
     /// Starts the capture loop. Call only after overlayWindowNumber is set.
@@ -46,45 +49,52 @@ final class CaptureViewModel {
         stopCaptureLoop()
     }
 
-    func updateMouseLocation(_ point: NSPoint) {
-        mouseLocation = point
-    }
-
     // MARK: - Keyboard Controls
 
     func handleKeyDown(_ event: NSEvent) {
+        if event.isARepeat && !allowsKeyRepeat(for: event.keyCode) {
+            return
+        }
+
+        let isCoarseAdjustment = event.modifierFlags.contains(.shift)
+        let viewportStep = AppSettings.shared.resizeStep * (isCoarseAdjustment ? 4 : 1)
+        let gridStep = isCoarseAdjustment ? 4 : 1
+        let thresholdStep: Float = 0.05 * (isCoarseAdjustment ? 4 : 1)
+
         switch event.keyCode {
         case 123: // Left arrow — shrink viewport
-            let step = AppSettings.shared.resizeStep
-            viewportSize = max(60, viewportSize - step)
+            viewportSize = max(60, viewportSize - viewportStep)
         case 124: // Right arrow — grow viewport
-            let step = AppSettings.shared.resizeStep
-            viewportSize = min(600, viewportSize + step)
+            viewportSize = min(600, viewportSize + viewportStep)
         case 126: // Up arrow — increase grid size
-            gridSize = min(32, gridSize + 1)
+            gridSize = min(32, gridSize + gridStep)
         case 125: // Down arrow — decrease grid size
-            gridSize = max(4, gridSize - 1)
+            gridSize = max(4, gridSize - gridStep)
         case 24, 69: // + (main keyboard and numpad)
-            brightnessThreshold = min(1.0, brightnessThreshold + 0.05)
+            brightnessThreshold = min(1.0, brightnessThreshold + thresholdStep)
         case 27, 78: // - (main keyboard and numpad)
-            brightnessThreshold = max(0.0, brightnessThreshold - 0.05)
+            brightnessThreshold = max(0.0, brightnessThreshold - thresholdStep)
         case 49: // Spacebar — toggle inversion
-            gridState.isInverted.toggle()
-        case 4: // H — toggle horizontal mirror
-            gridState.mirrorHorizontal.toggle()
-        case 9: // V — toggle vertical mirror
-            gridState.mirrorVertical.toggle()
+            isInverted.toggle()
+        case 4: // H — cycle horizontal mirror
+            horizontalMirrorMode = horizontalMirrorMode.next
+        case 9: // V — cycle vertical mirror
+            verticalMirrorMode = verticalMirrorMode.next
         case 18: // 1 — Threshold
             filterMode = .threshold
         case 19: // 2 — Otsu
             filterMode = .otsu
         case 20: // 3 — Adaptive
             filterMode = .adaptive
-        case 21: // 4 — Edge Detect
+        case 21: // 4 — Contrast
+            filterMode = .contrastBoost
+        case 23: // 5 — Clean
+            filterMode = .cleanThreshold
+        case 22: // 6 — Edge Detect
             filterMode = .edgeDetect
-        case 23: // 5 — Floyd-Steinberg
+        case 26: // 7 — Floyd-Steinberg
             filterMode = .floydSteinberg
-        case 22: // 6 — Bayer Dither
+        case 28: // 8 — Ordered Dither
             filterMode = .bayerDither
         case 3: // F — cycle filter
             let all = FilterMode.allCases
@@ -97,9 +107,22 @@ final class CaptureViewModel {
         }
     }
 
+    private func allowsKeyRepeat(for keyCode: UInt16) -> Bool {
+        switch keyCode {
+        case 123, 124, 125, 126, 24, 27, 69, 78:
+            return true
+        default:
+            return false
+        }
+    }
+
     func saveCurrentGrid() {
         let settings = AppSettings.shared
-        lastSavedURL = SVGExporter.save(grid: gridState, to: settings.saveDirectory, filenameFormat: settings.filenameFormat)
+        var grid = gridState
+        grid.isInverted = isInverted
+        grid.horizontalMirrorMode = horizontalMirrorMode
+        grid.verticalMirrorMode = verticalMirrorMode
+        lastSavedURL = SVGExporter.save(grid: grid, to: settings.saveDirectory, filenameFormat: settings.filenameFormat)
         if let url = lastSavedURL {
             print("Saved: \(url.path)")
         }
@@ -123,14 +146,14 @@ final class CaptureViewModel {
     }
 
     private func captureFrame() {
-        let currentMouse = mouseLocation
+        let currentMouse = ScreenCaptureService.currentMouseLocation()
         let currentGridSize = gridSize
         let currentViewportSize = viewportSize
         let currentThreshold = brightnessThreshold
         let currentFilterMode = filterMode
-        let currentInverted = gridState.isInverted
-        let currentMirrorH = gridState.mirrorHorizontal
-        let currentMirrorV = gridState.mirrorVertical
+        let currentInverted = isInverted
+        let currentHorizontalMirrorMode = horizontalMirrorMode
+        let currentVerticalMirrorMode = verticalMirrorMode
 
         let captureRect = ScreenCaptureService.cgRect(from: currentMouse, size: currentViewportSize)
 
@@ -140,8 +163,8 @@ final class CaptureViewModel {
         var newGrid = GridState(size: currentGridSize)
         newGrid.cells = GridFilters.apply(currentFilterMode, brightness: brightness, gridSize: currentGridSize, threshold: currentThreshold)
         newGrid.isInverted = currentInverted
-        newGrid.mirrorHorizontal = currentMirrorH
-        newGrid.mirrorVertical = currentMirrorV
+        newGrid.horizontalMirrorMode = currentHorizontalMirrorMode
+        newGrid.verticalMirrorMode = currentVerticalMirrorMode
 
         DispatchQueue.main.async { [weak self] in
             self?.gridState = newGrid

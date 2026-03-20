@@ -35,14 +35,32 @@ final class AppSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "filterMode") }
     }
 
-    var mirrorHorizontal: Bool {
-        get { UserDefaults.standard.bool(forKey: "mirrorHorizontal") }
-        set { UserDefaults.standard.set(newValue, forKey: "mirrorHorizontal") }
+    var horizontalMirrorMode: HorizontalMirrorMode {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: "horizontalMirrorMode"),
+               let mode = HorizontalMirrorMode(rawValue: raw) {
+                return mode
+            }
+            if UserDefaults.standard.object(forKey: "mirrorHorizontal") as? Bool == true {
+                return .leftToRight
+            }
+            return .none
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "horizontalMirrorMode") }
     }
 
-    var mirrorVertical: Bool {
-        get { UserDefaults.standard.bool(forKey: "mirrorVertical") }
-        set { UserDefaults.standard.set(newValue, forKey: "mirrorVertical") }
+    var verticalMirrorMode: VerticalMirrorMode {
+        get {
+            if let raw = UserDefaults.standard.string(forKey: "verticalMirrorMode"),
+               let mode = VerticalMirrorMode(rawValue: raw) {
+                return mode
+            }
+            if UserDefaults.standard.object(forKey: "mirrorVertical") as? Bool == true {
+                return .topToBottom
+            }
+            return .none
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "verticalMirrorMode") }
     }
 
     var filenameFormat: String {

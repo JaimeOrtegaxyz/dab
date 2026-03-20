@@ -1,40 +1,34 @@
 import Foundation
 
 enum SVGExporter {
-    /// Generates an SVG string from a GridState using row-merge optimization.
-    /// Black cells become black `<path>` segments on a transparent background.
+    /// Generates an SVG string from a GridState with one exact 1x1 square per black cell.
+    /// White cells remain transparent.
     static func generateSVG(from grid: GridState) -> String {
         let n = grid.size
-        var pathData = ""
+        var rects: [String] = []
 
         for row in 0..<n {
-            var col = 0
-            while col < n {
+            for col in 0..<n {
                 if grid.effectiveCell(row: row, col: col) {
-                    let startCol = col
-                    while col < n && grid.effectiveCell(row: row, col: col) {
-                        col += 1
-                    }
-                    let width = col - startCol
-                    pathData += "M\(startCol) \(row)h\(width)v1h-\(width)Z"
-                } else {
-                    col += 1
+                    rects.append("    <rect x=\"\(col)\" y=\"\(row)\" width=\"1\" height=\"1\"/>")
                 }
             }
         }
 
-        if pathData.isEmpty {
+        if rects.isEmpty {
             return """
             <?xml version="1.0" encoding="UTF-8"?>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)" shape-rendering="crispEdges">
             </svg>
             """
         }
 
         return """
         <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
-        <path d="\(pathData)" fill="black"/>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)" shape-rendering="crispEdges">
+          <g fill="black">
+        \(rects.joined(separator: "\n"))
+          </g>
         </svg>
         """
     }

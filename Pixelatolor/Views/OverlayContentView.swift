@@ -7,6 +7,9 @@ struct OverlayContentView: View {
     let gridSize: Int
     let viewportSize: CGFloat
     let filterMode: FilterMode
+    let isInverted: Bool
+    let horizontalMirrorMode: HorizontalMirrorMode
+    let verticalMirrorMode: VerticalMirrorMode
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,7 +46,19 @@ struct OverlayContentView: View {
 
             // Info bar
             HStack {
-                Text(filterMode.displayName)
+                Text(filterMode.shortDisplayName)
+                if isInverted {
+                    Text("Negative")
+                        .foregroundColor(.yellow)
+                }
+                if let label = horizontalMirrorMode.statusLabel {
+                    Text(label)
+                        .foregroundColor(.orange)
+                }
+                if let label = verticalMirrorMode.statusLabel {
+                    Text(label)
+                        .foregroundColor(.orange)
+                }
                 Spacer()
                 Text("\(gridSize)x\(gridSize)")
             }

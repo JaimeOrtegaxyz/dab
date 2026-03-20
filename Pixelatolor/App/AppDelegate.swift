@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -6,10 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyManager = HotkeyManager()
     private let viewModel = CaptureViewModel()
     private var overlayWindow: OverlayWindow?
-    private var mouseMovedMonitor: Any?
-    private var localMouseMonitor: Any?
+    private var cursorTrackingTimer: DispatchSourceTimer?
     private var localKeyMonitor: Any?
     private var localClickMonitor: Any?
+    private var isCursorHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Setup status bar
@@ -48,14 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 1. Prepare state (no capture loop yet)
         viewModel.activate()
 
-        let settings = AppSettings.shared
-        viewModel.gridState.mirrorHorizontal = settings.mirrorHorizontal
-        viewModel.gridState.mirrorVertical = settings.mirrorVertical
-
         // 2. Create overlay window
         let size = viewModel.viewportSize
         let barHeight = OverlayContentView.infoBarHeight
-        let mouseLocation = NSEvent.mouseLocation
+        let mouseLocation = ScreenCaptureService.currentMouseLocation()
         let frame = NSRect(
             x: mouseLocation.x - size / 2,
             y: mouseLocation.y - size / 2 - barHeight,
@@ -64,31 +61,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let window = OverlayWindow(contentRect: frame)
-        let hostingView = NSHostingView(rootView:
+        let hostingView = CursorHidingHostingView(rootView:
             OverlayHostView(viewModel: viewModel)
         )
         window.contentView = hostingView
         window.makeKeyAndOrderFront(nil)
+        window.invalidateCursorRects(for: hostingView)
         overlayWindow = window
 
         // 3. Set window number THEN start capture loop
         viewModel.overlayWindowNumber = window.windowNumber
         viewModel.startCapturing()
+        startCursorTracking()
 
-        mouseMovedMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            self?.handleMouseMoved(NSEvent.mouseLocation)
-        }
-
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            self?.handleMouseMoved(NSEvent.mouseLocation)
-            return event
-        }
+        setCursorHidden(true)
 
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             self.viewModel.handleKeyDown(event)
             if !self.viewModel.isActive {
                 self.dismissOverlay()
+            } else {
+                self.syncOverlayToCursor()
             }
             return nil
         }
@@ -100,33 +94,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func handleMouseMoved(_ location: NSPoint) {
-        viewModel.updateMouseLocation(location)
-
+    private func frameForOverlay(at location: NSPoint) -> NSRect {
         let size = viewModel.viewportSize
         let barHeight = OverlayContentView.infoBarHeight
-        let frame = NSRect(
+        return NSRect(
             x: location.x - size / 2,
             y: location.y - size / 2 - barHeight,
             width: size,
             height: size + barHeight
         )
-        overlayWindow?.setFrame(frame, display: true)
+    }
+
+    private func syncOverlayToCursor() {
+        guard let overlayWindow else { return }
+
+        let frame = frameForOverlay(at: ScreenCaptureService.currentMouseLocation())
+        if overlayWindow.frame.size == frame.size {
+            overlayWindow.setFrameOrigin(frame.origin)
+        } else {
+            overlayWindow.setFrame(frame, display: false)
+        }
+    }
+
+    private func startCursorTracking() {
+        stopCursorTracking()
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(16), leeway: .milliseconds(2))
+        timer.setEventHandler { [weak self] in
+            self?.syncOverlayToCursor()
+        }
+        timer.resume()
+        cursorTrackingTimer = timer
+    }
+
+    private func stopCursorTracking() {
+        cursorTrackingTimer?.cancel()
+        cursorTrackingTimer = nil
     }
 
     private func dismissOverlay() {
         viewModel.deactivate()
+        stopCursorTracking()
+        setCursorHidden(false)
         overlayWindow?.orderOut(nil)
         overlayWindow = nil
-
-        if let monitor = mouseMovedMonitor {
-            NSEvent.removeMonitor(monitor)
-            mouseMovedMonitor = nil
-        }
-        if let monitor = localMouseMonitor {
-            NSEvent.removeMonitor(monitor)
-            localMouseMonitor = nil
-        }
         if let monitor = localKeyMonitor {
             NSEvent.removeMonitor(monitor)
             localKeyMonitor = nil
@@ -136,17 +148,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             localClickMonitor = nil
         }
     }
+
+    private func setCursorHidden(_ hidden: Bool) {
+        guard hidden != isCursorHidden else { return }
+
+        if hidden {
+            NSCursor.hide()
+            CGDisplayHideCursor(CGMainDisplayID())
+        } else {
+            CGDisplayShowCursor(CGMainDisplayID())
+            NSCursor.unhide()
+        }
+
+        isCursorHidden = hidden
+    }
 }
 
 struct OverlayHostView: View {
-    @Bindable var viewModel: CaptureViewModel
+    @ObservedObject var viewModel: CaptureViewModel
 
     var body: some View {
         OverlayContentView(
             gridState: viewModel.gridState,
             gridSize: viewModel.gridSize,
             viewportSize: viewModel.viewportSize,
-            filterMode: viewModel.filterMode
+            filterMode: viewModel.filterMode,
+            isInverted: viewModel.isInverted,
+            horizontalMirrorMode: viewModel.horizontalMirrorMode,
+            verticalMirrorMode: viewModel.verticalMirrorMode
         )
+    }
+}
+
+final class CursorHidingHostingView<Content: View>: NSHostingView<Content> {
+    private var invisibleCursor: NSCursor {
+        let image = NSImage(size: NSSize(width: 16, height: 16))
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSBezierPath(rect: NSRect(origin: .zero, size: image.size)).fill()
+        image.unlockFocus()
+        return NSCursor(image: image, hotSpot: .zero)
+    }
+
+    override func resetCursorRects() {
+        discardCursorRects()
+        addCursorRect(bounds, cursor: invisibleCursor)
     }
 }

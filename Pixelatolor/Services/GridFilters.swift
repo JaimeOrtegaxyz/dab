@@ -9,13 +9,42 @@ enum GridFilters {
             return applyOtsu(brightness: brightness)
         case .adaptive:
             return applyAdaptive(brightness: brightness, gridSize: gridSize)
+        case .contrastBoost:
+            return applyContrastBoost(brightness: brightness, threshold: threshold)
+        case .cleanThreshold:
+            return applyCleanThreshold(brightness: brightness, gridSize: gridSize, threshold: threshold)
         case .edgeDetect:
             return applyEdgeDetect(brightness: brightness, gridSize: gridSize, threshold: threshold)
         case .floydSteinberg:
-            return applyFloydSteinberg(brightness: brightness, gridSize: gridSize)
+            return applyFloydSteinberg(brightness: brightness, gridSize: gridSize, threshold: threshold)
         case .bayerDither:
-            return applyBayerDither(brightness: brightness, gridSize: gridSize)
+            return applyBayerDither(brightness: brightness, gridSize: gridSize, threshold: threshold)
         }
+    }
+
+    private static func clamped(_ value: Float, min minValue: Float = 0, max maxValue: Float = 1) -> Float {
+        Swift.min(maxValue, Swift.max(minValue, value))
+    }
+
+    private static func percentile(in sorted: [Float], p: Float) -> Float {
+        guard let last = sorted.indices.last else { return 0.5 }
+        let index = Int(round(Float(last) * clamped(p)))
+        return sorted[index]
+    }
+
+    private static func normalizeContrast(brightness: [Float]) -> [Float] {
+        guard !brightness.isEmpty else { return [] }
+
+        let sorted = brightness.sorted()
+        let low = percentile(in: sorted, p: 0.10)
+        let high = percentile(in: sorted, p: 0.90)
+        let range = high - low
+
+        guard range > 0.001 else {
+            return brightness.map { clamped($0) }
+        }
+
+        return brightness.map { clamped(($0 - low) / range) }
     }
 
     // MARK: - 1. Threshold (existing behavior)
@@ -77,7 +106,7 @@ enum GridFilters {
         }
 
         var result = [Bool](repeating: false, count: count)
-        let radius = 2 // 5x5 neighborhood
+        let radius = max(1, min(3, gridSize / 6))
         let k: Float = 0.2
         let maxStdDev: Float = 0.5
 
@@ -112,7 +141,71 @@ enum GridFilters {
         return result
     }
 
-    // MARK: - 4. Edge Detect (Sobel)
+    // MARK: - 4. Auto Contrast
+
+    private static func applyContrastBoost(brightness: [Float], threshold: Float) -> [Bool] {
+        applyThreshold(brightness: normalizeContrast(brightness: brightness), threshold: threshold)
+    }
+
+    // MARK: - 5. Cleanup Threshold
+
+    private static func applyCleanThreshold(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
+        let count = gridSize * gridSize
+        guard gridSize > 0, brightness.count >= count else {
+            return brightness.map { $0 < threshold }
+        }
+
+        let base = applyThreshold(
+            brightness: normalizeContrast(brightness: Array(brightness.prefix(count))),
+            threshold: threshold
+        )
+
+        let passes = gridSize <= 10 ? 2 : 1
+        return applyMajorityCleanup(cells: base, gridSize: gridSize, passes: passes)
+    }
+
+    private static func applyMajorityCleanup(cells: [Bool], gridSize: Int, passes: Int) -> [Bool] {
+        var current = cells
+
+        for _ in 0..<passes {
+            var next = current
+
+            for row in 0..<gridSize {
+                for col in 0..<gridSize {
+                    var blackCount = 0
+                    var totalCount = 0
+
+                    for dr in -1...1 {
+                        for dc in -1...1 {
+                            let r = row + dr
+                            let c = col + dc
+                            guard r >= 0, r < gridSize, c >= 0, c < gridSize else { continue }
+                            totalCount += 1
+                            if current[r * gridSize + c] {
+                                blackCount += 1
+                            }
+                        }
+                    }
+
+                    let whiteCount = totalCount - blackCount
+                    let index = row * gridSize + col
+                    if blackCount > whiteCount {
+                        next[index] = true
+                    } else if whiteCount > blackCount {
+                        next[index] = false
+                    } else {
+                        next[index] = current[index]
+                    }
+                }
+            }
+
+            current = next
+        }
+
+        return current
+    }
+
+    // MARK: - 6. Edge Detect (Sobel)
 
     private static func applyEdgeDetect(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
         let count = gridSize * gridSize
@@ -148,36 +241,49 @@ enum GridFilters {
         return edges.map { ($0 / maxEdge) > (1.0 - threshold) }
     }
 
-    // MARK: - 5. Floyd-Steinberg Dithering
+    // MARK: - 7. Floyd-Steinberg Dithering
 
-    private static func applyFloydSteinberg(brightness: [Float], gridSize: Int) -> [Bool] {
+    private static func applyFloydSteinberg(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
         let count = gridSize * gridSize
         guard gridSize > 0, brightness.count >= count else {
-            return brightness.map { $0 < 0.5 }
+            return brightness.map { $0 < threshold }
         }
 
         var buffer = Array(brightness.prefix(count))
         var result = [Bool](repeating: false, count: count)
 
-        for row in 0..<gridSize {
-            for col in 0..<gridSize {
-                let idx = row * gridSize + col
-                let oldVal = buffer[idx]
-                let newVal: Float = oldVal < 0.5 ? 0.0 : 1.0
-                result[idx] = newVal == 0.0 // black
-                let error = oldVal - newVal
+        func addError(row: Int, col: Int, error: Float, weight: Float) {
+            guard row >= 0, row < gridSize, col >= 0, col < gridSize else { return }
+            let index = row * gridSize + col
+            buffer[index] = clamped(buffer[index] + error * weight)
+        }
 
-                if col + 1 < gridSize {
-                    buffer[idx + 1] += error * 7.0 / 16.0
+        for row in 0..<gridSize {
+            if row.isMultiple(of: 2) {
+                for col in 0..<gridSize {
+                    let idx = row * gridSize + col
+                    let oldVal = buffer[idx]
+                    let newVal: Float = oldVal < threshold ? 0.0 : 1.0
+                    result[idx] = newVal == 0.0
+                    let error = oldVal - newVal
+
+                    addError(row: row, col: col + 1, error: error, weight: 7.0 / 16.0)
+                    addError(row: row + 1, col: col - 1, error: error, weight: 3.0 / 16.0)
+                    addError(row: row + 1, col: col, error: error, weight: 5.0 / 16.0)
+                    addError(row: row + 1, col: col + 1, error: error, weight: 1.0 / 16.0)
                 }
-                if row + 1 < gridSize {
-                    if col > 0 {
-                        buffer[(row + 1) * gridSize + (col - 1)] += error * 3.0 / 16.0
-                    }
-                    buffer[(row + 1) * gridSize + col] += error * 5.0 / 16.0
-                    if col + 1 < gridSize {
-                        buffer[(row + 1) * gridSize + (col + 1)] += error * 1.0 / 16.0
-                    }
+            } else {
+                for col in stride(from: gridSize - 1, through: 0, by: -1) {
+                    let idx = row * gridSize + col
+                    let oldVal = buffer[idx]
+                    let newVal: Float = oldVal < threshold ? 0.0 : 1.0
+                    result[idx] = newVal == 0.0
+                    let error = oldVal - newVal
+
+                    addError(row: row, col: col - 1, error: error, weight: 7.0 / 16.0)
+                    addError(row: row + 1, col: col + 1, error: error, weight: 3.0 / 16.0)
+                    addError(row: row + 1, col: col, error: error, weight: 5.0 / 16.0)
+                    addError(row: row + 1, col: col - 1, error: error, weight: 1.0 / 16.0)
                 }
             }
         }
@@ -185,7 +291,7 @@ enum GridFilters {
         return result
     }
 
-    // MARK: - 6. Bayer Ordered Dithering (4x4)
+    // MARK: - 8. Bayer Ordered Dithering (4x4)
 
     private static let bayerMatrix: [Float] = [
          0.0 / 16,  8.0 / 16,  2.0 / 16, 10.0 / 16,
@@ -194,18 +300,19 @@ enum GridFilters {
         15.0 / 16,  7.0 / 16, 13.0 / 16,  5.0 / 16,
     ]
 
-    private static func applyBayerDither(brightness: [Float], gridSize: Int) -> [Bool] {
+    private static func applyBayerDither(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
         let count = gridSize * gridSize
         guard gridSize > 0, brightness.count >= count else {
-            return brightness.map { $0 < 0.5 }
+            return brightness.map { $0 < threshold }
         }
 
         var result = [Bool](repeating: false, count: count)
         for row in 0..<gridSize {
             for col in 0..<gridSize {
                 let idx = row * gridSize + col
-                let t = bayerMatrix[(row % 4) * 4 + (col % 4)]
-                result[idx] = brightness[idx] < t
+                let patternThreshold = bayerMatrix[(row % 4) * 4 + (col % 4)] - 0.5
+                let adjustedThreshold = clamped(threshold + patternThreshold)
+                result[idx] = brightness[idx] < adjustedThreshold
             }
         }
 

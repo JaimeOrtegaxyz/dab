@@ -4,8 +4,8 @@ struct GridState {
     let size: Int
     var cells: [Bool]  // true = black cell
     var isInverted: Bool = false
-    var mirrorHorizontal: Bool = false
-    var mirrorVertical: Bool = false
+    var horizontalMirrorMode: HorizontalMirrorMode = .none
+    var verticalMirrorMode: VerticalMirrorMode = .none
 
     init(size: Int) {
         self.size = size
@@ -15,8 +15,27 @@ struct GridState {
     /// Returns the effective cell value accounting for inversion and mirroring
     func effectiveCell(row: Int, col: Int) -> Bool {
         guard row >= 0, row < size, col >= 0, col < size else { return false }
-        let r = mirrorVertical ? (size - 1 - row) : row
-        let c = mirrorHorizontal ? (size - 1 - col) : col
+
+        let r: Int
+        switch verticalMirrorMode {
+        case .none:
+            r = row
+        case .topToBottom:
+            r = row < size / 2 ? row : size - 1 - row
+        case .bottomToTop:
+            r = row < size / 2 ? size - 1 - row : row
+        }
+
+        let c: Int
+        switch horizontalMirrorMode {
+        case .none:
+            c = col
+        case .leftToRight:
+            c = col < size / 2 ? col : size - 1 - col
+        case .rightToLeft:
+            c = col < size / 2 ? size - 1 - col : col
+        }
+
         let index = r * size + c
         guard index >= 0, index < cells.count else { return false }
         let value = cells[index]
