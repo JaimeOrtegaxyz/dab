@@ -45,7 +45,7 @@ struct SettingsView: View {
             hotkeyDisplayString = AppSettings.shared.hotkeyDisplayString
             updateFilenamePreview()
         }
-        .onChange(of: filenameFormat) { _ in
+        .onChange(of: filenameFormat) { _, _ in
             updateFilenamePreview()
         }
         .onDisappear {
@@ -227,6 +227,8 @@ struct SettingsView: View {
                 shortcutRow("Shift + arrows / +/-", "Larger jumps")
                 Divider()
                 shortcutRow("Space", "Toggle negative")
+                Divider()
+                shortcutRow("R", "Toggle round mode")
                 Divider()
                 shortcutRow("H", "Cycle horizontal mirror")
                 Divider()

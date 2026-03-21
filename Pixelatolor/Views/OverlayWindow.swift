@@ -4,7 +4,7 @@ final class OverlayWindow: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )

@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCursorHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Setup status bar
         statusBarController.setup()
         statusBarController.onActivate = { [weak self] in
             self?.toggleOverlay()
@@ -22,7 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
         }
 
-        // Register global hotkey
         hotkeyManager.callback = { [weak self] in
             self?.toggleOverlay()
         }
@@ -35,8 +33,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dismissOverlay()
     }
 
-    // MARK: - Overlay Management
-
     private func toggleOverlay() {
         if viewModel.isActive {
             dismissOverlay()
@@ -46,34 +42,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showOverlay() {
-        // 1. Prepare state (no capture loop yet)
+        guard Permissions.ensureScreenRecordingAccess() else {
+            return
+        }
+
         viewModel.activate()
 
-        // 2. Create overlay window
-        let size = viewModel.viewportSize
-        let barHeight = OverlayContentView.infoBarHeight
         let mouseLocation = ScreenCaptureService.currentMouseLocation()
-        let frame = NSRect(
-            x: mouseLocation.x - size / 2,
-            y: mouseLocation.y - size / 2 - barHeight,
-            width: size,
-            height: size + barHeight
-        )
+        let frame = frameForOverlay(at: mouseLocation)
 
         let window = OverlayWindow(contentRect: frame)
         let hostingView = CursorHidingHostingView(rootView:
             OverlayHostView(viewModel: viewModel)
         )
         window.contentView = hostingView
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.invalidateCursorRects(for: hostingView)
         overlayWindow = window
 
-        // 3. Set window number THEN start capture loop
-        viewModel.overlayWindowNumber = window.windowNumber
         viewModel.startCapturing()
         startCursorTracking()
-
         setCursorHidden(true)
 
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -97,12 +86,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func frameForOverlay(at location: NSPoint) -> NSRect {
         let size = viewModel.viewportSize
         let barHeight = OverlayContentView.infoBarHeight
-        return NSRect(
-            x: location.x - size / 2,
-            y: location.y - size / 2 - barHeight,
-            width: size,
-            height: size + barHeight
-        )
+        let totalHeight = size + barHeight
+
+        guard let screen = ScreenCaptureService.screen(containing: location) else {
+            return NSRect(
+                x: location.x - size / 2,
+                y: location.y - size / 2 - barHeight,
+                width: size,
+                height: totalHeight
+            )
+        }
+
+        let screenFrame = screen.frame
+        let maxX = max(screenFrame.minX, screenFrame.maxX - size)
+        let maxY = max(screenFrame.minY, screenFrame.maxY - totalHeight)
+        let x = min(max(location.x - size / 2, screenFrame.minX), maxX)
+        let y = min(max(location.y - size / 2 - barHeight, screenFrame.minY), maxY)
+
+        return NSRect(x: x, y: y, width: size, height: totalHeight)
     }
 
     private func syncOverlayToCursor() {
@@ -139,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setCursorHidden(false)
         overlayWindow?.orderOut(nil)
         overlayWindow = nil
+
         if let monitor = localKeyMonitor {
             NSEvent.removeMonitor(monitor)
             localKeyMonitor = nil

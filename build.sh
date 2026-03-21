@@ -20,10 +20,6 @@ resolve_sdk() {
     fi
 
     candidates+=(
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX13.3.sdk"
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk"
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX12.3.sdk"
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX12.sdk"
         "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
     )
 
@@ -37,22 +33,11 @@ resolve_sdk() {
     return 1
 }
 
-resolve_target() {
-    case "$(basename "$1")" in
-        MacOSX12*)
-            printf '%s\n' "arm64-apple-macos12.0"
-            ;;
-        *)
-            printf '%s\n' "arm64-apple-macos13.0"
-            ;;
-    esac
-}
-
 SDKROOT="$(resolve_sdk)" || {
     echo "Unable to locate a macOS SDK."
     exit 1
 }
-TARGET="$(resolve_target "${SDKROOT}")"
+TARGET="arm64-apple-macos14.0"
 
 mkdir -p "${BUILD_DIR}" "${SWIFT_MODULE_CACHE}" "${CLANG_MODULE_CACHE}"
 
@@ -76,11 +61,13 @@ swiftc \
     "${SWIFT_SOURCES[@]}" \
     -o "${BUILD_DIR}/${APP_NAME}"
 
+BINARY_PATH="${BUILD_DIR}/${APP_NAME}"
+
 echo "Creating app bundle..."
 rm -rf "${APP_BUNDLE}"
 mkdir -p "${MACOS}"
 
-cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
+cp "${BINARY_PATH}" "${MACOS}/${APP_NAME}"
 cp "Pixelatolor/App/Info.plist" "${CONTENTS}/Info.plist"
 
 echo "Codesigning..."

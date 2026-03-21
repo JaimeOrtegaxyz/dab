@@ -17,26 +17,33 @@ struct OverlayContentView: View {
                 let actualSize = gridState.size
                 guard actualSize > 0 else { return }
 
-                let cellW = size.width / CGFloat(actualSize)
-                let cellH = size.height / CGFloat(actualSize)
-
                 // Fill white background
                 context.fill(
                     Path(CGRect(origin: .zero, size: size)),
                     with: .color(.white)
                 )
 
-                // Draw black cells
-                for row in 0..<actualSize {
-                    for col in 0..<actualSize {
-                        if gridState.effectiveCell(row: row, col: col) {
-                            let rect = CGRect(
-                                x: CGFloat(col) * cellW,
-                                y: CGFloat(row) * cellH,
-                                width: cellW,
-                                height: cellH
-                            )
-                            context.fill(Path(rect), with: .color(.black))
+                if gridState.isRounded {
+                    let roundedPath = RoundedGridPath.cgPath(
+                        for: gridState,
+                        in: CGRect(origin: .zero, size: size)
+                    )
+                    context.fill(Path(roundedPath), with: .color(.black))
+                } else {
+                    let cellW = size.width / CGFloat(actualSize)
+                    let cellH = size.height / CGFloat(actualSize)
+
+                    for row in 0..<actualSize {
+                        for col in 0..<actualSize {
+                            if gridState.effectiveCell(row: row, col: col) {
+                                let rect = CGRect(
+                                    x: CGFloat(col) * cellW,
+                                    y: CGFloat(row) * cellH,
+                                    width: cellW,
+                                    height: cellH
+                                )
+                                context.fill(Path(rect), with: .color(.black))
+                            }
                         }
                     }
                 }
@@ -59,6 +66,8 @@ struct OverlayContentView: View {
                     Text(label)
                         .foregroundColor(.orange)
                 }
+                Spacer()
+                Text(gridState.isRounded ? "Round" : "Square")
                 Spacer()
                 Text("\(gridSize)x\(gridSize)")
             }

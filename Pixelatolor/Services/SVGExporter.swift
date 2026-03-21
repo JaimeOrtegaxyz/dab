@@ -1,10 +1,29 @@
 import Foundation
 
 enum SVGExporter {
-    /// Generates an SVG string from a GridState with one exact 1x1 square per black cell.
-    /// White cells remain transparent.
+    /// Generates an SVG string from the current grid state.
     static func generateSVG(from grid: GridState) -> String {
         let n = grid.size
+
+        if grid.isRounded {
+            let pathData = RoundedGridPath.svgPathData(for: grid)
+
+            if pathData.isEmpty {
+                return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
+                </svg>
+                """
+            }
+
+            return """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
+            <path d="\(pathData)" fill="black" fill-rule="evenodd"/>
+            </svg>
+            """
+        }
+
         var rects: [String] = []
 
         for row in 0..<n {

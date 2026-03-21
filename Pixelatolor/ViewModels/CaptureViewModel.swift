@@ -10,17 +10,13 @@ final class CaptureViewModel: ObservableObject {
     @Published var isInverted: Bool = false
     @Published var horizontalMirrorMode: HorizontalMirrorMode = .none
     @Published var verticalMirrorMode: VerticalMirrorMode = .none
+    @Published var isRounded: Bool = false
     @Published var isActive: Bool = false
     @Published var lastSavedURL: URL?
 
     private let captureService = ScreenCaptureService()
     private var timer: DispatchSourceTimer?
     private let captureQueue = DispatchQueue(label: "com.pixelatolor.capture", qos: .userInteractive)
-
-    var overlayWindowNumber: Int {
-        get { captureService.excludeWindowNumber }
-        set { captureService.excludeWindowNumber = newValue }
-    }
 
     func loadSettings() {
         let settings = AppSettings.shared
@@ -32,14 +28,13 @@ final class CaptureViewModel: ObservableObject {
         verticalMirrorMode = settings.verticalMirrorMode
     }
 
-    /// Prepares settings and state. Call startCapturing() separately after the window is ready.
     func activate() {
         loadSettings()
         isInverted = false
+        isRounded = false
         isActive = true
     }
 
-    /// Starts the capture loop. Call only after overlayWindowNumber is set.
     func startCapturing() {
         startCaptureLoop()
     }
@@ -48,8 +43,6 @@ final class CaptureViewModel: ObservableObject {
         isActive = false
         stopCaptureLoop()
     }
-
-    // MARK: - Keyboard Controls
 
     func handleKeyDown(_ event: NSEvent) {
         if event.isARepeat && !allowsKeyRepeat(for: event.keyCode) {
@@ -62,45 +55,47 @@ final class CaptureViewModel: ObservableObject {
         let thresholdStep: Float = 0.05 * (isCoarseAdjustment ? 4 : 1)
 
         switch event.keyCode {
-        case 123: // Left arrow — shrink viewport
+        case 123:
             viewportSize = max(60, viewportSize - viewportStep)
-        case 124: // Right arrow — grow viewport
+        case 124:
             viewportSize = min(600, viewportSize + viewportStep)
-        case 126: // Up arrow — increase grid size
+        case 126:
             gridSize = min(32, gridSize + gridStep)
-        case 125: // Down arrow — decrease grid size
+        case 125:
             gridSize = max(4, gridSize - gridStep)
-        case 24, 69: // + (main keyboard and numpad)
+        case 24, 69:
             brightnessThreshold = min(1.0, brightnessThreshold + thresholdStep)
-        case 27, 78: // - (main keyboard and numpad)
+        case 27, 78:
             brightnessThreshold = max(0.0, brightnessThreshold - thresholdStep)
-        case 49: // Spacebar — toggle inversion
+        case 49:
             isInverted.toggle()
-        case 4: // H — cycle horizontal mirror
+        case 4:
             horizontalMirrorMode = horizontalMirrorMode.next
-        case 9: // V — cycle vertical mirror
+        case 9:
             verticalMirrorMode = verticalMirrorMode.next
-        case 18: // 1 — Threshold
+        case 15:
+            isRounded.toggle()
+        case 18:
             filterMode = .threshold
-        case 19: // 2 — Otsu
+        case 19:
             filterMode = .otsu
-        case 20: // 3 — Adaptive
+        case 20:
             filterMode = .adaptive
-        case 21: // 4 — Contrast
+        case 21:
             filterMode = .contrastBoost
-        case 23: // 5 — Clean
+        case 23:
             filterMode = .cleanThreshold
-        case 22: // 6 — Edge Detect
+        case 22:
             filterMode = .edgeDetect
-        case 26: // 7 — Floyd-Steinberg
+        case 26:
             filterMode = .floydSteinberg
-        case 28: // 8 — Ordered Dither
+        case 28:
             filterMode = .bayerDither
-        case 3: // F — cycle filter
+        case 3:
             let all = FilterMode.allCases
             let idx = all.firstIndex(of: filterMode) ?? 0
             filterMode = all[(idx + 1) % all.count]
-        case 53: // Escape — dismiss
+        case 53:
             deactivate()
         default:
             break
@@ -122,17 +117,16 @@ final class CaptureViewModel: ObservableObject {
         grid.isInverted = isInverted
         grid.horizontalMirrorMode = horizontalMirrorMode
         grid.verticalMirrorMode = verticalMirrorMode
+        grid.isRounded = isRounded
         lastSavedURL = SVGExporter.save(grid: grid, to: settings.saveDirectory, filenameFormat: settings.filenameFormat)
         if let url = lastSavedURL {
             print("Saved: \(url.path)")
         }
     }
 
-    // MARK: - Capture Loop
-
     private func startCaptureLoop() {
         let timer = DispatchSource.makeTimerSource(queue: captureQueue)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(33)) // ~30fps
+        timer.schedule(deadline: .now(), repeating: .milliseconds(33))
         timer.setEventHandler { [weak self] in
             self?.captureFrame()
         }
@@ -154,10 +148,9 @@ final class CaptureViewModel: ObservableObject {
         let currentInverted = isInverted
         let currentHorizontalMirrorMode = horizontalMirrorMode
         let currentVerticalMirrorMode = verticalMirrorMode
+        let currentRounded = isRounded
 
-        let captureRect = ScreenCaptureService.cgRect(from: currentMouse, size: currentViewportSize)
-
-        guard let image = captureService.capture(rect: captureRect) else { return }
+        guard let image = captureService.capture(at: currentMouse, size: currentViewportSize) else { return }
 
         let brightness = image.brightnessGrid(gridSize: currentGridSize)
         var newGrid = GridState(size: currentGridSize)
@@ -165,6 +158,7 @@ final class CaptureViewModel: ObservableObject {
         newGrid.isInverted = currentInverted
         newGrid.horizontalMirrorMode = currentHorizontalMirrorMode
         newGrid.verticalMirrorMode = currentVerticalMirrorMode
+        newGrid.isRounded = currentRounded
 
         DispatchQueue.main.async { [weak self] in
             self?.gridState = newGrid
