@@ -36,17 +36,22 @@ final class CaptureViewModel: ObservableObject {
     }
 
     func startCapturing() {
+        captureQueue.async { [captureService] in
+            captureService.prepare(at: ScreenCaptureService.currentMouseLocation())
+        }
         startCaptureLoop()
     }
 
     func deactivate() {
         isActive = false
         stopCaptureLoop()
+        captureService.stop()
     }
 
-    func handleKeyDown(_ event: NSEvent) {
+    @discardableResult
+    func handleKeyDown(_ event: NSEvent) -> Bool {
         if event.isARepeat && !allowsKeyRepeat(for: event.keyCode) {
-            return
+            return true
         }
 
         let isCoarseAdjustment = event.modifierFlags.contains(.shift)
@@ -98,8 +103,10 @@ final class CaptureViewModel: ObservableObject {
         case 53:
             deactivate()
         default:
-            break
+            return false
         }
+
+        return true
     }
 
     private func allowsKeyRepeat(for keyCode: UInt16) -> Bool {
@@ -140,28 +147,32 @@ final class CaptureViewModel: ObservableObject {
     }
 
     private func captureFrame() {
-        let currentMouse = ScreenCaptureService.currentMouseLocation()
-        let currentGridSize = gridSize
-        let currentViewportSize = viewportSize
-        let currentThreshold = brightnessThreshold
-        let currentFilterMode = filterMode
-        let currentInverted = isInverted
-        let currentHorizontalMirrorMode = horizontalMirrorMode
-        let currentVerticalMirrorMode = verticalMirrorMode
-        let currentRounded = isRounded
+        autoreleasepool {
+            let currentMouse = ScreenCaptureService.currentMouseLocation()
+            let currentGridSize = gridSize
+            let currentViewportSize = viewportSize
+            let currentThreshold = brightnessThreshold
+            let currentFilterMode = filterMode
+            let currentInverted = isInverted
+            let currentHorizontalMirrorMode = horizontalMirrorMode
+            let currentVerticalMirrorMode = verticalMirrorMode
+            let currentRounded = isRounded
 
-        guard let image = captureService.capture(at: currentMouse, size: currentViewportSize) else { return }
+            guard let brightness = captureService.brightnessGrid(
+                at: currentMouse,
+                size: currentViewportSize,
+                gridSize: currentGridSize
+            ) else { return }
+            var newGrid = GridState(size: currentGridSize)
+            newGrid.cells = GridFilters.apply(currentFilterMode, brightness: brightness, gridSize: currentGridSize, threshold: currentThreshold)
+            newGrid.isInverted = currentInverted
+            newGrid.horizontalMirrorMode = currentHorizontalMirrorMode
+            newGrid.verticalMirrorMode = currentVerticalMirrorMode
+            newGrid.isRounded = currentRounded
 
-        let brightness = image.brightnessGrid(gridSize: currentGridSize)
-        var newGrid = GridState(size: currentGridSize)
-        newGrid.cells = GridFilters.apply(currentFilterMode, brightness: brightness, gridSize: currentGridSize, threshold: currentThreshold)
-        newGrid.isInverted = currentInverted
-        newGrid.horizontalMirrorMode = currentHorizontalMirrorMode
-        newGrid.verticalMirrorMode = currentVerticalMirrorMode
-        newGrid.isRounded = currentRounded
-
-        DispatchQueue.main.async { [weak self] in
-            self?.gridState = newGrid
+            DispatchQueue.main.async { [weak self] in
+                self?.gridState = newGrid
+            }
         }
     }
 }

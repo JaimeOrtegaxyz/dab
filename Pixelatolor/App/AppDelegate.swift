@@ -8,9 +8,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = CaptureViewModel()
     private var overlayWindow: OverlayWindow?
     private var cursorTrackingTimer: DispatchSourceTimer?
-    private var localKeyMonitor: Any?
-    private var localClickMonitor: Any?
+    private var workspaceObserver: Any?
+    private var eventTap: CFMachPort?
+    private var eventTapRunLoopSource: CFRunLoopSource?
     private var isCursorHidden = false
+    private var lastExternalApplication: NSRunningApplication?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusBarController.setup()
@@ -26,11 +28,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let settings = AppSettings.shared
         hotkeyManager.register(keyCode: settings.hotkeyKeyCode, modifiers: settings.hotkeyModifiers)
+
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        if let frontmostApp = NSWorkspace.shared.frontmostApplication, frontmostApp.processIdentifier != currentPID {
+            lastExternalApplication = frontmostApp
+        }
+
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                app.processIdentifier != currentPID
+            else {
+                return
+            }
+
+            self?.lastExternalApplication = app
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
         dismissOverlay()
+
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+            self.workspaceObserver = nil
+        }
     }
 
     private func toggleOverlay() {
@@ -45,6 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Permissions.ensureScreenRecordingAccess() else {
             return
         }
+        guard Permissions.ensureAccessibilityAccess() else {
+            return
+        }
 
         viewModel.activate()
 
@@ -56,30 +86,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             OverlayHostView(viewModel: viewModel)
         )
         window.contentView = hostingView
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        window.ignoresMouseEvents = true
+        window.orderFrontRegardless()
         window.invalidateCursorRects(for: hostingView)
         overlayWindow = window
 
         viewModel.startCapturing()
         startCursorTracking()
+        startEventTap()
         setCursorHidden(true)
 
-        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            self.viewModel.handleKeyDown(event)
-            if !self.viewModel.isActive {
-                self.dismissOverlay()
-            } else {
-                self.syncOverlayToCursor()
-            }
-            return nil
-        }
-
-        localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            self?.viewModel.saveCurrentGrid()
-            self?.dismissOverlay()
-            return nil
+        DispatchQueue.main.async { [weak self] in
+            self?.lastExternalApplication?.activate(options: [])
         }
     }
 
@@ -137,18 +155,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dismissOverlay() {
         viewModel.deactivate()
         stopCursorTracking()
+        stopEventTap()
         setCursorHidden(false)
         overlayWindow?.orderOut(nil)
         overlayWindow = nil
-
-        if let monitor = localKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-            localKeyMonitor = nil
-        }
-        if let monitor = localClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            localClickMonitor = nil
-        }
     }
 
     private func setCursorHidden(_ hidden: Bool) {
@@ -163,6 +173,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         isCursorHidden = hidden
+    }
+
+    private func startEventTap() {
+        stopEventTap()
+
+        let events: [CGEventType] = [.leftMouseDown, .keyDown, .tapDisabledByTimeout, .tapDisabledByUserInput]
+        let mask = events.reduce(CGEventMask(0)) { partialResult, eventType in
+            partialResult | (1 << eventType.rawValue)
+        }
+
+        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            guard let userInfo else {
+                return Unmanaged.passUnretained(event)
+            }
+
+            let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userInfo).takeUnretainedValue()
+            return appDelegate.handleEventTap(type: type, event: event)
+        }
+
+        guard let eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: callback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            print("Failed to create event tap. Accessibility permission is likely missing.")
+            return
+        }
+
+        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+
+        self.eventTap = eventTap
+        eventTapRunLoopSource = runLoopSource
+    }
+
+    private func stopEventTap() {
+        if let runLoopSource = eventTapRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+            eventTapRunLoopSource = nil
+        }
+
+        if let eventTap = eventTap {
+            CFMachPortInvalidate(eventTap)
+            self.eventTap = nil
+        }
+    }
+
+    private func handleEventTap(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        switch type {
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            if let eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+            return Unmanaged.passUnretained(event)
+        case .leftMouseDown:
+            viewModel.saveCurrentGrid()
+            dismissOverlay()
+            return nil
+        case .keyDown:
+            guard let keyEvent = NSEvent(cgEvent: event) else {
+                return Unmanaged.passUnretained(event)
+            }
+            guard viewModel.handleKeyDown(keyEvent) else {
+                return Unmanaged.passUnretained(event)
+            }
+
+            if !viewModel.isActive {
+                dismissOverlay()
+            } else {
+                syncOverlayToCursor()
+            }
+            return nil
+        default:
+            return Unmanaged.passUnretained(event)
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import CoreGraphics
 
 enum Permissions {
@@ -13,6 +14,11 @@ enum Permissions {
 
         showPermissionAlert()
         return false
+    }
+
+    static func ensureAccessibilityAccess() -> Bool {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        return AXIsProcessTrustedWithOptions(options)
     }
 
     static func showPermissionAlert() {
