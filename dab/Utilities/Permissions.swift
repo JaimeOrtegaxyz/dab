@@ -24,7 +24,7 @@ enum Permissions {
     static func showPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Screen Recording Permission Required"
-        alert.informativeText = "Pixelatolor needs Screen Recording permission to capture screen content. If the macOS prompt appeared, approve it, then relaunch the app. Otherwise, enable it in System Settings → Privacy & Security → Screen Recording."
+        alert.informativeText = "dab needs Screen Recording permission to capture screen content. If the macOS prompt appeared, approve it, then relaunch the app. Otherwise, enable it in System Settings → Privacy & Security → Screen Recording."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Cancel")

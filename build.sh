@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="Pixelatolor"
+APP_NAME="dab"
 BUILD_ROOT=".build"
 BUILD_DIR="${BUILD_ROOT}/release"
 APP_BUNDLE="${APP_NAME}.app"
@@ -44,7 +44,7 @@ mkdir -p "${BUILD_DIR}" "${SWIFT_MODULE_CACHE}" "${CLANG_MODULE_CACHE}"
 SWIFT_SOURCES=()
 while IFS= read -r source; do
     SWIFT_SOURCES+=("${source}")
-done < <(find "Pixelatolor" -name '*.swift' | sort)
+done < <(find "dab" -name '*.swift' | sort)
 
 if [[ "${#SWIFT_SOURCES[@]}" -eq 0 ]]; then
     echo "No Swift source files found."
@@ -68,7 +68,7 @@ rm -rf "${APP_BUNDLE}"
 mkdir -p "${MACOS}"
 
 cp "${BINARY_PATH}" "${MACOS}/${APP_NAME}"
-cp "Pixelatolor/App/Info.plist" "${CONTENTS}/Info.plist"
+cp "dab/App/Info.plist" "${CONTENTS}/Info.plist"
 
 echo "Codesigning..."
 codesign --force --sign - "${APP_BUNDLE}"
@@ -78,4 +78,4 @@ echo "You can run it with: open ${APP_BUNDLE}"
 echo ""
 echo "NOTE: If screen capture only shows the desktop, go to"
 echo "  System Settings → Privacy & Security → Screen Recording"
-echo "  Remove Pixelatolor if listed, re-run the app, and re-grant permission."
+echo "  Remove dab if listed, re-run the app, and re-grant permission."

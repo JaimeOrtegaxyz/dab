@@ -1,18 +1,18 @@
-# Pixelatolor LLM Context
+# dab LLM Context
 
-This document is meant to be given to another language model so it can quickly understand what Pixelatolor is, what it does, what kind of product it wants to be, and how to reason about future ideas, copy, positioning, or visual direction.
+This document is meant to be given to another language model so it can quickly understand what dab is, what it does, what kind of product it wants to be, and how to reason about future ideas, copy, positioning, or visual direction.
 
 It is intentionally more interpretive than a technical spec. Some parts below are hard facts from the current app. Some parts are inferred product intent based on the implementation and the existing tone of the project. That distinction is called out where it matters.
 
 ## One-Paragraph Summary
 
-Pixelatolor is a macOS menu bar utility that lets a user sample a live area of their screen around the cursor, reduce it to a small monochrome pixel grid, preview the result in real time, and export that result as an SVG made of exact square cells. It was built first as the icon-making tool for a separate project, Surface & Logic, and second as something that can be open-sourced for others who want to explore a similar visual language. The app is not trying to be a full image editor. It is a fast reduction tool: summon it, hover over something interesting, tune the simplification, and save a crisp black-on-transparent pixel interpretation of that moment.
+dab is a macOS menu bar utility that lets a user sample a live area of their screen around the cursor, reduce it to a small monochrome pixel grid, preview the result in real time, and export that result as an SVG made of exact square cells. It was built first as the icon-making tool for a separate project, Surface & Logic, and second as something that can be open-sourced for others who want to explore a similar visual language. The app is not trying to be a full image editor. It is a fast reduction tool: summon it, hover over something interesting, tune the simplification, and save a crisp black-on-transparent pixel interpretation of that moment.
 
 ## Stable Product Facts
 
 These are true of the current app as implemented.
 
-- Pixelatolor is a macOS app.
+- dab is a macOS app.
 - It lives in the menu bar and can also be triggered via a configurable global hotkey.
 - When activated, it opens a floating preview window near the cursor and samples the screen area around that cursor position.
 - The preview updates live as the mouse moves.
@@ -36,7 +36,7 @@ These are true of the current app as implemented.
 
 ## Origin Story And Why It Matters
 
-Pixelatolor is not just a utility that happened to be built in the abstract. It exists because the author wants to create the icon language for a separate project called Surface & Logic.
+dab is not just a utility that happened to be built in the abstract. It exists because the author wants to create the icon language for a separate project called Surface & Logic.
 
 That matters because it gives the app a real center of gravity. The project is not trying to answer a vague market prompt like "what if there were a pixel tool." It is solving a specific creative need inside a larger brand and studio worldview.
 
@@ -47,7 +47,7 @@ The plan is:
 - then open-source it as a kind of honest process artifact
 - meaning: "this is the actual tool behind that visual language, feel free to use it if it speaks to you"
 
-That origin gives Pixelatolor a more interesting story than a generic utility. It is both a tool and evidence of a process.
+That origin gives dab a more interesting story than a generic utility. It is both a tool and evidence of a process.
 
 ## Relationship To Surface & Logic
 
@@ -56,9 +56,9 @@ Surface & Logic is built around a core tension: the visible encounter on one sid
 - surface means the thing a person perceives immediately: the visual style, the composition, the expressiveness, the personality
 - logic means the system that makes the result hold together: constraints, structure, documentation, reproducibility, and ownership
 
-Pixelatolor fits that philosophy unusually well.
+dab fits that philosophy unusually well.
 
-The surface side of Pixelatolor is obvious:
+The surface side of dab is obvious:
 
 - bold pixel forms
 - strong reduction
@@ -74,17 +74,17 @@ The logic side is equally important:
 - predictable SVG output
 - no hidden smoothing or fake vectorization
 
-That is not incidental. Pixelatolor is a concrete expression of the same ideology behind Surface & Logic: playful outcomes made trustworthy by constraints.
+That is not incidental. dab is a concrete expression of the same ideology behind Surface & Logic: playful outcomes made trustworthy by constraints.
 
-In Surface & Logic terms, Pixelatolor says something like this:
+In Surface & Logic terms, dab says something like this:
 
 "We can let the surface be bold because the logic underneath is disciplined."
 
-## What Pixelatolor Is Trying To Do
+## What dab Is Trying To Do
 
 This section is partly interpretive, but it is the most important section for downstream LLM use.
 
-Pixelatolor is best understood as a reduction instrument.
+dab is best understood as a reduction instrument.
 
 Its job is not to preserve a screenshot faithfully. Its job is to take high-density, full-color, high-detail screen content and crush it into something simpler, sharper, stranger, and more symbolic. The output should feel intentional rather than merely degraded. A good result looks like a tiny emblem, icon, mark, glyph, diagram fragment, or lo-fi visual sample.
 
@@ -106,7 +106,7 @@ The intended experience is fast, direct, and tactile.
 
 The user flow is roughly:
 
-1. Trigger Pixelatolor from the menu bar or hotkey.
+1. Trigger dab from the menu bar or hotkey.
 2. Move the cursor over some part of the screen they want to sample.
 3. Watch a live simplified preview follow the cursor.
 4. Adjust the interpretation on the fly:
@@ -119,7 +119,7 @@ The user flow is roughly:
 5. Click once to save the current result as SVG.
 6. Return immediately to whatever they were doing.
 
-That interaction model matters. Pixelatolor should feel closer to a capture tool, scanner, loupe, or live sampler than to a document-centric editor. It should not feel heavy. It should not ask the user to import, manage layers, or build a composition from scratch. It is opportunistic: the user steals shapes from what is already on screen.
+That interaction model matters. dab should feel closer to a capture tool, scanner, loupe, or live sampler than to a document-centric editor. It should not feel heavy. It should not ask the user to import, manage layers, or build a composition from scratch. It is opportunistic: the user steals shapes from what is already on screen.
 
 ## What Makes The Output Special
 
@@ -177,7 +177,7 @@ That question is more important than whether a filter sounds mathematically inte
 
 The primary user, in the most literal sense, is the author of the app using it to make visual assets for Surface & Logic.
 
-The secondary audience is broader. Pixelatolor is likely most relevant to people who already think visually and work quickly:
+The secondary audience is broader. dab is likely most relevant to people who already think visually and work quickly:
 
 - designers
 - creative coders
@@ -194,7 +194,7 @@ It may also appeal to people who like niche utilities and playful tools. The imp
 
 This is equally important for positioning and copy.
 
-Pixelatolor is not:
+dab is not:
 
 - a full image editor
 - a batch image converter
@@ -241,7 +241,7 @@ Another useful way to say this is:
 
 ## A Good Mental Model For Copy
 
-When writing copy, it may help to think in terms of verbs. Pixelatolor:
+When writing copy, it may help to think in terms of verbs. dab:
 
 - samples
 - reduces
@@ -338,13 +338,13 @@ If another LLM receives this file and is asked to generate ideas, it should assu
 
 If a downstream workflow needs a compact summary, this is a good default:
 
-Pixelatolor is a macOS menu bar tool that samples the screen under your cursor, reduces it into a live monochrome pixel grid, and exports the result as crisp square-cell SVG.
+dab is a macOS menu bar tool that samples the screen under your cursor, reduces it into a live monochrome pixel grid, and exports the result as crisp square-cell SVG.
 
 ## Useful Expanded Description
 
 If a downstream workflow needs a more expressive summary, this is a good default:
 
-Pixelatolor turns any part of your screen into a tiny black-and-transparent pixel composition. You trigger it, hover over something interesting, watch a live reduced preview follow the cursor, tune the interpretation with different filters and controls, and click once to save a crisp SVG made from exact square cells. It is less like a full editor and more like a fast visual reduction instrument for designers, artists, and anyone who wants to extract graphic structure from on-screen detail.
+dab turns any part of your screen into a tiny black-and-transparent pixel composition. You trigger it, hover over something interesting, watch a live reduced preview follow the cursor, tune the interpretation with different filters and controls, and click once to save a crisp SVG made from exact square cells. It is less like a full editor and more like a fast visual reduction instrument for designers, artists, and anyone who wants to extract graphic structure from on-screen detail.
 
 ## Open Interpretive Space
 

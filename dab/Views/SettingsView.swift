@@ -11,7 +11,7 @@ struct SettingsView: View {
     @AppStorage("filterMode") private var filterModeRaw: String = FilterMode.threshold.rawValue
     @AppStorage("horizontalMirrorMode") private var horizontalMirrorModeRaw: String = AppSettings.shared.horizontalMirrorMode.rawValue
     @AppStorage("verticalMirrorMode") private var verticalMirrorModeRaw: String = AppSettings.shared.verticalMirrorMode.rawValue
-    @AppStorage("filenameFormat") private var filenameFormat: String = "pixelatolor_{date}_{time}"
+    @AppStorage("filenameFormat") private var filenameFormat: String = "dab_{date}_{time}"
     @State private var savePathDisplay: String = ""
     @State private var isRecordingHotkey: Bool = false
     @State private var hotkeyKeyCode: UInt32 = AppSettings.shared.hotkeyKeyCode
@@ -278,7 +278,7 @@ struct SettingsView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Pixelatolor")
+                Text("dab")
                     .font(.system(.title2, design: .rounded, weight: .bold))
                 Text("Version 1.0")
                     .font(.system(.subheadline))

@@ -12,7 +12,7 @@ final class StatusBarController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "grid", accessibilityDescription: "Pixelatolor")
+            button.image = NSImage(systemSymbolName: "grid", accessibilityDescription: "dab")
         }
 
         let menu = NSMenu()
@@ -20,7 +20,7 @@ final class StatusBarController {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Pixelatolor", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit dab", action: #selector(quit), keyEquivalent: "q"))
 
         for item in menu.items {
             item.target = self
@@ -50,7 +50,7 @@ final class StatusBarController {
         )
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
-        window.title = "Pixelatolor Settings"
+        window.title = "dab Settings"
 
         // Visual effect background for glassmorphism
         let visualEffect = NSVisualEffectView()

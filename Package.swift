@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pixelatolor",
+    name: "dab",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Pixelatolor",
-            path: "Pixelatolor",
+            name: "dab",
+            path: "dab",
             exclude: ["App/Info.plist"]
         )
     ]

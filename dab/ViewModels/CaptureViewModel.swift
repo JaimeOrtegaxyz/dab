@@ -16,7 +16,7 @@ final class CaptureViewModel: ObservableObject {
 
     private let captureService = ScreenCaptureService()
     private var timer: DispatchSourceTimer?
-    private let captureQueue = DispatchQueue(label: "com.pixelatolor.capture", qos: .userInteractive)
+    private let captureQueue = DispatchQueue(label: "com.dab.capture", qos: .userInteractive)
 
     func loadSettings() {
         let settings = AppSettings.shared

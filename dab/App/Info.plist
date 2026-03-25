@@ -5,13 +5,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>Pixelatolor</string>
+	<string>dab</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.pixelatolor.app</string>
+	<string>com.dab.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Pixelatolor</string>
+	<string>dab</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,6 +23,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Pixelatolor needs screen recording permission to capture screen content for pixelation.</string>
+	<string>dab needs screen recording permission to capture screen content for pixelation.</string>
 </dict>
 </plist>

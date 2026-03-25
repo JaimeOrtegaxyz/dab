@@ -64,7 +64,7 @@ final class AppSettings {
     }
 
     var filenameFormat: String {
-        get { UserDefaults.standard.string(forKey: "filenameFormat") ?? "pixelatolor_{date}_{time}" }
+        get { UserDefaults.standard.string(forKey: "filenameFormat") ?? "dab_{date}_{time}" }
         set { UserDefaults.standard.set(newValue, forKey: "filenameFormat") }
     }
 

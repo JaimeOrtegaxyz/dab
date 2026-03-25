@@ -12,8 +12,8 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         let pixelsPerPointY: CGFloat
     }
 
-    private let controlQueue = DispatchQueue(label: "com.pixelatolor.screencapture.control")
-    private let outputQueue = DispatchQueue(label: "com.pixelatolor.screencapture.output", qos: .userInteractive)
+    private let controlQueue = DispatchQueue(label: "com.dab.screencapture.control")
+    private let outputQueue = DispatchQueue(label: "com.dab.screencapture.output", qos: .userInteractive)
     private let frameLock = NSLock()
 
     private var shareableContent: SCShareableContent?

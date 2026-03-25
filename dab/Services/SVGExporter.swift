@@ -71,13 +71,13 @@ enum SVGExporter {
         let illegal = CharacterSet(charactersIn: "/\\:*?\"<>|")
         name = name.components(separatedBy: illegal).joined(separator: "_")
 
-        if name.isEmpty { name = "pixelatolor" }
+        if name.isEmpty { name = "dab" }
         return name + ".svg"
     }
 
     /// Saves the SVG to a file and returns the URL
     @discardableResult
-    static func save(grid: GridState, to directory: URL, filenameFormat: String = "pixelatolor_{date}_{time}") -> URL? {
+    static func save(grid: GridState, to directory: URL, filenameFormat: String = "dab_{date}_{time}") -> URL? {
         let filename = buildFilename(from: filenameFormat, gridSize: grid.size)
         let url = directory.appendingPathComponent(filename)
 
