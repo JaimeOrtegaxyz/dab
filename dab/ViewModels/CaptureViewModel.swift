@@ -17,6 +17,8 @@ final class CaptureViewModel: ObservableObject {
     private let captureService = ScreenCaptureService()
     private var timer: DispatchSourceTimer?
     private let captureQueue = DispatchQueue(label: "com.dab.capture", qos: .userInteractive)
+    private let streamKeepAliveDuration: TimeInterval = 12
+    private let startupWarmupKeepAliveDuration: TimeInterval = 20
 
     func loadSettings() {
         let settings = AppSettings.shared
@@ -42,10 +44,18 @@ final class CaptureViewModel: ObservableObject {
         startCaptureLoop()
     }
 
+    func prewarmCaptureResources() {
+        captureQueue.async { [captureService, startupWarmupKeepAliveDuration] in
+            captureService.prewarm()
+            captureService.prepare(at: ScreenCaptureService.currentMouseLocation())
+            captureService.stop(keepAliveFor: startupWarmupKeepAliveDuration)
+        }
+    }
+
     func deactivate() {
         isActive = false
         stopCaptureLoop()
-        captureService.stop()
+        captureService.stop(keepAliveFor: streamKeepAliveDuration)
     }
 
     @discardableResult

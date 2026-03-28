@@ -17,12 +17,22 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
     private let frameLock = NSLock()
 
     private var shareableContent: SCShareableContent?
+    private var lastShareableContentRefresh: Date = .distantPast
     private var currentStream: SCStream?
     private var currentDisplayID: CGDirectDisplayID?
+    private var currentCaptureState: (screenFrame: CGRect, pixelsPerPointX: CGFloat, pixelsPerPointY: CGFloat)?
     private var latestFrame: FrameSnapshot?
+    private var pendingStopWorkItem: DispatchWorkItem?
 
     static func currentMouseLocation() -> NSPoint {
         NSEvent.mouseLocation
+    }
+
+    func prewarm() {
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            _ = self.loadShareableContent(forceRefresh: self.shareableContent == nil)
+        }
     }
 
     func prepare(at mouseLocation: NSPoint) {
@@ -33,9 +43,9 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         ensureStream(for: screen)
     }
 
-    func stop() {
+    func stop(keepAliveFor delay: TimeInterval = 0) {
         controlQueue.async { [weak self] in
-            self?.stopCurrentStream()
+            self?.scheduleStop(after: delay)
         }
     }
 
@@ -64,22 +74,10 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         let state = controlQueue.sync { () -> (screenFrame: CGRect, pixelsPerPointX: CGFloat, pixelsPerPointY: CGFloat)? in
-            guard stream === currentStream, let displayID = currentDisplayID else {
+            guard stream === currentStream else {
                 return nil
             }
-
-            let width = max(CGFloat(CGDisplayPixelsWide(displayID)), 1)
-            let height = max(CGFloat(CGDisplayPixelsHigh(displayID)), 1)
-            let frame = Self.screenFrame(for: displayID) ?? .zero
-            guard frame.width > 0, frame.height > 0 else {
-                return nil
-            }
-
-            return (
-                screenFrame: frame,
-                pixelsPerPointX: width / frame.width,
-                pixelsPerPointY: height / frame.height
-            )
+            return currentCaptureState
         }
 
         guard let state else {
@@ -106,6 +104,7 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
 
             self.currentStream = nil
             self.currentDisplayID = nil
+            self.currentCaptureState = nil
             self.clearLatestFrame()
         }
     }
@@ -116,26 +115,30 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         controlQueue.sync {
+            cancelPendingStop()
             let needsRestart = currentStream == nil || currentDisplayID != displayID
             guard needsRestart else {
                 return
             }
 
-            startStream(for: screen, displayID: displayID)
+            startStream(for: displayID)
         }
     }
 
-    private func startStream(for screen: NSScreen, displayID: CGDirectDisplayID) {
+    private func startStream(for displayID: CGDirectDisplayID) {
         stopCurrentStream()
         clearLatestFrame()
 
-        shareableContent = fetchShareableContent()
-
-        guard
-            let shareableContent,
-            let display = shareableContent.displays.first(where: { $0.displayID == displayID })
-        else {
+        guard let shareableContent = shareableContent(for: displayID),
+              let display = shareableContent.displays.first(where: { $0.displayID == displayID }) else {
             print("Failed to resolve shareable display for \(displayID).")
+            return
+        }
+
+        let width = max(CGFloat(CGDisplayPixelsWide(displayID)), 1)
+        let height = max(CGFloat(CGDisplayPixelsHigh(displayID)), 1)
+        let frame = Self.screenFrame(for: displayID) ?? .zero
+        guard frame.width > 0, frame.height > 0 else {
             return
         }
 
@@ -182,17 +185,24 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
 
         currentStream = stream
         currentDisplayID = displayID
+        currentCaptureState = (
+            screenFrame: frame,
+            pixelsPerPointX: width / frame.width,
+            pixelsPerPointY: height / frame.height
+        )
     }
 
     private func stopCurrentStream() {
         guard let stream = currentStream else {
             currentDisplayID = nil
+            currentCaptureState = nil
             clearLatestFrame()
             return
         }
 
         currentStream = nil
         currentDisplayID = nil
+        currentCaptureState = nil
         clearLatestFrame()
 
         do {
@@ -209,6 +219,29 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
             semaphore.signal()
         }
         semaphore.wait()
+    }
+
+    private func scheduleStop(after delay: TimeInterval) {
+        pendingStopWorkItem?.cancel()
+        pendingStopWorkItem = nil
+
+        guard delay > 0 else {
+            stopCurrentStream()
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.stopCurrentStream()
+            self.pendingStopWorkItem = nil
+        }
+        pendingStopWorkItem = workItem
+        controlQueue.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func cancelPendingStop() {
+        pendingStopWorkItem?.cancel()
+        pendingStopWorkItem = nil
     }
 
     private func latestFrameSnapshot() -> FrameSnapshot? {
@@ -239,6 +272,39 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
 
         semaphore.wait()
         return fetchedContent
+    }
+
+    private func loadShareableContent(forceRefresh: Bool) -> SCShareableContent? {
+        if !forceRefresh, let shareableContent {
+            return shareableContent
+        }
+
+        guard let fetchedContent = fetchShareableContent() else {
+            return shareableContent
+        }
+
+        shareableContent = fetchedContent
+        lastShareableContentRefresh = Date()
+        return fetchedContent
+    }
+
+    private func shareableContent(for displayID: CGDirectDisplayID) -> SCShareableContent? {
+        if let cached = shareableContent,
+           cached.displays.contains(where: { $0.displayID == displayID }) {
+            return cached
+        }
+
+        let shouldForceRefresh = Date().timeIntervalSince(lastShareableContentRefresh) > 10
+        guard let refreshed = loadShareableContent(forceRefresh: shouldForceRefresh || shareableContent == nil) else {
+            return nil
+        }
+
+        if refreshed.displays.contains(where: { $0.displayID == displayID }) {
+            return refreshed
+        }
+
+        let forcedRefresh = loadShareableContent(forceRefresh: true)
+        return forcedRefresh?.displays.contains(where: { $0.displayID == displayID }) == true ? forcedRefresh : nil
     }
 
     private func cropRect(around mouseLocation: NSPoint, size: CGFloat, in snapshot: FrameSnapshot) -> CGRect {

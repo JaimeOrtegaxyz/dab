@@ -9,6 +9,8 @@ CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
 SWIFT_MODULE_CACHE="${BUILD_ROOT}/swift-module-cache"
 CLANG_MODULE_CACHE="${BUILD_ROOT}/clang-module-cache"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-B6263C6F33FB6C841AB4CE6026F1B2B24768B222}"
+ENTITLEMENTS="dab.entitlements"
 
 resolve_sdk() {
     local candidates=()
@@ -70,12 +72,8 @@ mkdir -p "${MACOS}"
 cp "${BINARY_PATH}" "${MACOS}/${APP_NAME}"
 cp "dab/App/Info.plist" "${CONTENTS}/Info.plist"
 
-echo "Codesigning..."
-codesign --force --sign - "${APP_BUNDLE}"
+echo "Codesigning with identity: ${SIGNING_IDENTITY}"
+codesign --force --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" "${APP_BUNDLE}"
 
 echo "Done! Created ${APP_BUNDLE}"
 echo "You can run it with: open ${APP_BUNDLE}"
-echo ""
-echo "NOTE: If screen capture only shows the desktop, go to"
-echo "  System Settings → Privacy & Security → Screen Recording"
-echo "  Remove dab if listed, re-run the app, and re-grant permission."
