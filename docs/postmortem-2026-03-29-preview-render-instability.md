@@ -63,13 +63,6 @@ The live preview pipeline regressed after the screen-capture refactor. The overl
 - User re-tested on real UI targets (Google logo text, white input bar).
 - Final result reported as fixed.
 
-## Build/signing note
-
-- For persistent TCC behavior across builds, app bundles must be signed consistently with the same Apple Development identity.
-- This fix was built and signed with:
-  - `B6263C6F33FB6C841AB4CE6026F1B2B24768B222`
-  - `Apple Development: Jesus Jaime Ortega Cruz (PQSAA2QC4N)`
-
 ## Prevention checklist
 
 - Always gate stream frames by `SCFrameStatus == .complete`.
