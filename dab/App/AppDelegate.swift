@@ -94,7 +94,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Permissions.showInteractionPermissionAlert()
             return
         }
-        viewModel.startCapturing()
 
         let mouseLocation = ScreenCaptureService.currentMouseLocation()
         let frame = frameForOverlay(at: mouseLocation)
@@ -109,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.invalidateCursorRects(for: hostingView)
         overlayWindow = window
 
+        viewModel.startCapturing()
         startCursorTracking()
         installLocalKeyMonitor()
 

@@ -6,7 +6,8 @@ import ScreenCaptureKit
 
 final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
     private struct FrameSnapshot {
-        let pixelBuffer: CVPixelBuffer
+        // Keep the owning sample buffer alive so the image buffer memory stays valid.
+        let sampleBuffer: CMSampleBuffer
         let screenFrame: CGRect
         let pixelsPerPointX: CGFloat
         let pixelsPerPointY: CGFloat
@@ -56,20 +57,19 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
 
         ensureStream(for: screen)
 
-        guard let snapshot = latestFrameSnapshot() else {
+        guard let snapshot = latestFrameSnapshot(),
+              let pixelBuffer = CMSampleBufferGetImageBuffer(snapshot.sampleBuffer) else {
             return nil
         }
 
         let cropRect = cropRect(around: mouseLocation, size: size, in: snapshot)
-        return snapshot.pixelBuffer.brightnessGrid(in: cropRect, gridSize: gridSize)
+        return pixelBuffer.brightnessGrid(in: cropRect, gridSize: gridSize)
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
-        guard outputType == .screen, CMSampleBufferIsValid(sampleBuffer) else {
-            return
-        }
-
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+        guard outputType == .screen,
+              CMSampleBufferIsValid(sampleBuffer),
+              isCompleteFrame(sampleBuffer) else {
             return
         }
 
@@ -86,7 +86,7 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
 
         frameLock.lock()
         latestFrame = FrameSnapshot(
-            pixelBuffer: pixelBuffer,
+            sampleBuffer: sampleBuffer,
             screenFrame: state.screenFrame,
             pixelsPerPointX: state.pixelsPerPointX,
             pixelsPerPointY: state.pixelsPerPointY
@@ -129,10 +129,30 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         stopCurrentStream()
         clearLatestFrame()
 
-        guard let shareableContent = shareableContent(for: displayID),
-              let display = shareableContent.displays.first(where: { $0.displayID == displayID }) else {
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+
+        guard var resolvedShareableContent = shareableContent(for: displayID),
+              var display = resolvedShareableContent.displays.first(where: { $0.displayID == displayID }) else {
             print("Failed to resolve shareable display for \(displayID).")
             return
+        }
+
+        var excludedApplications = resolvedShareableContent.applications.filter {
+            $0.processID == currentPID
+        }
+
+        // If the app wasn't present in prewarmed/cached content, force-refresh once so
+        // we don't accidentally capture our own overlay and create recursive noise.
+        if excludedApplications.isEmpty,
+           let refreshedContent = loadShareableContent(forceRefresh: true),
+           let refreshedDisplay = refreshedContent.displays.first(where: { $0.displayID == displayID }) {
+            resolvedShareableContent = refreshedContent
+            display = refreshedDisplay
+            excludedApplications = refreshedContent.applications.filter { $0.processID == currentPID }
+        }
+
+        if excludedApplications.isEmpty {
+            print("Warning: current app PID \(currentPID) not found in shareable applications; capture may include overlay.")
         }
 
         let width = max(CGFloat(CGDisplayPixelsWide(displayID)), 1)
@@ -142,9 +162,6 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
             return
         }
 
-        let excludedApplications = shareableContent.applications.filter {
-            $0.processID == ProcessInfo.processInfo.processIdentifier
-        }
         let filter = SCContentFilter(
             display: display,
             excludingApplications: excludedApplications,
@@ -242,6 +259,29 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
     private func cancelPendingStop() {
         pendingStopWorkItem?.cancel()
         pendingStopWorkItem = nil
+    }
+
+    private func isCompleteFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+            as? [[SCStreamFrameInfo: Any]],
+            let attachments = attachmentsArray.first else {
+            return false
+        }
+
+        let statusRaw: Int
+        if let statusNumber = attachments[.status] as? NSNumber {
+            statusRaw = statusNumber.intValue
+        } else if let statusInt = attachments[.status] as? Int {
+            statusRaw = statusInt
+        } else {
+            return false
+        }
+
+        guard let status = SCFrameStatus(rawValue: statusRaw) else {
+            return false
+        }
+
+        return status == .complete
     }
 
     private func latestFrameSnapshot() -> FrameSnapshot? {
