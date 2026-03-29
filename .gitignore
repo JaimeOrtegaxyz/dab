@@ -1,3 +1,23 @@
+# macOS
 .DS_Store
+
+# Claude Code
+.claude/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# Repo-specific
 .build/
+.swiftpm/
+.worktreeinclude
 dab.app/
