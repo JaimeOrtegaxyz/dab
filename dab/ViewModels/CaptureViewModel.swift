@@ -33,6 +33,7 @@ final class CaptureViewModel: ObservableObject {
         loadSettings()
         isInverted = false
         isRounded = false
+        syncCurrentGridPresentation()
         isActive = true
     }
 
@@ -83,12 +84,16 @@ final class CaptureViewModel: ObservableObject {
             brightnessThreshold = max(0.0, brightnessThreshold - thresholdStep)
         case 49:
             isInverted.toggle()
+            syncCurrentGridPresentation()
         case 4:
             horizontalMirrorMode = horizontalMirrorMode.next
+            syncCurrentGridPresentation()
         case 9:
             verticalMirrorMode = verticalMirrorMode.next
+            syncCurrentGridPresentation()
         case 15:
             isRounded.toggle()
+            syncCurrentGridPresentation()
         case 18:
             filterMode = .threshold
         case 19:
@@ -183,5 +188,12 @@ final class CaptureViewModel: ObservableObject {
                 self?.gridState = newGrid
             }
         }
+    }
+
+    private func syncCurrentGridPresentation() {
+        gridState.isInverted = isInverted
+        gridState.horizontalMirrorMode = horizontalMirrorMode
+        gridState.verticalMirrorMode = verticalMirrorMode
+        gridState.isRounded = isRounded
     }
 }

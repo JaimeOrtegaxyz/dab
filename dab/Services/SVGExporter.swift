@@ -6,9 +6,10 @@ enum SVGExporter {
         let n = grid.size
 
         if grid.isRounded {
-            let pathData = RoundedGridPath.svgPathData(for: grid)
+            let boundaryPathData = RoundedGridPath.svgBoundaryPathData(for: grid)
+            let bridgePathData = RoundedGridPath.svgBridgePathData(for: grid)
 
-            if pathData.isEmpty {
+            if boundaryPathData.isEmpty && bridgePathData.isEmpty {
                 return """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
@@ -16,10 +17,18 @@ enum SVGExporter {
                 """
             }
 
+            var pathElements: [String] = []
+            if !boundaryPathData.isEmpty {
+                pathElements.append("<path d=\"\(boundaryPathData)\" fill=\"black\" fill-rule=\"evenodd\"/>")
+            }
+            if !bridgePathData.isEmpty {
+                pathElements.append("<path d=\"\(bridgePathData)\" fill=\"black\"/>")
+            }
+
             return """
             <?xml version="1.0" encoding="UTF-8"?>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
-            <path d="\(pathData)" fill="black" fill-rule="evenodd"/>
+            \(pathElements.joined(separator: "\n"))
             </svg>
             """
         }

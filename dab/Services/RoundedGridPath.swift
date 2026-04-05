@@ -78,7 +78,8 @@ enum RoundedGridPath {
     static func cgPath(for grid: GridState, in rect: CGRect) -> CGPath {
         let path = CGMutablePath()
         let loops = simplifiedBoundaryLoops(for: grid)
-        guard !loops.isEmpty else { return path }
+        let bridgeCenters = diagonalBridgeCenters(for: grid)
+        guard !loops.isEmpty || !bridgeCenters.isEmpty else { return path }
 
         let cellWidth = rect.width / CGFloat(grid.size)
         let cellHeight = rect.height / CGFloat(grid.size)
@@ -94,10 +95,21 @@ enum RoundedGridPath {
             appendRoundedLoop(points, radius: radius, to: path)
         }
 
+        for center in bridgeCenters {
+            appendDiagonalBridge(
+                at: CGPoint(
+                    x: rect.minX + CGFloat(center.x) * cellWidth,
+                    y: rect.minY + CGFloat(center.y) * cellHeight
+                ),
+                radius: radius,
+                to: path
+            )
+        }
+
         return path
     }
 
-    static func svgPathData(for grid: GridState) -> String {
+    static func svgBoundaryPathData(for grid: GridState) -> String {
         simplifiedBoundaryLoops(for: grid)
             .map { loop in
                 let points = loop.map { CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)) }
@@ -106,8 +118,38 @@ enum RoundedGridPath {
             .joined(separator: " ")
     }
 
+    static func svgBridgePathData(for grid: GridState) -> String {
+        diagonalBridgeCenters(for: grid)
+            .map { svgDiagonalBridge(at: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)), radius: 0.5) }
+            .joined(separator: " ")
+    }
+
     private static func simplifiedBoundaryLoops(for grid: GridState) -> [[GridPoint]] {
         boundaryLoops(for: grid).map(simplify)
+    }
+
+    private static func diagonalBridgeCenters(for grid: GridState) -> [GridPoint] {
+        guard grid.size >= 2 else { return [] }
+
+        var centers: [GridPoint] = []
+
+        for row in 0..<(grid.size - 1) {
+            for col in 0..<(grid.size - 1) {
+                let topLeft = grid.effectiveCell(row: row, col: col)
+                let topRight = grid.effectiveCell(row: row, col: col + 1)
+                let bottomLeft = grid.effectiveCell(row: row + 1, col: col)
+                let bottomRight = grid.effectiveCell(row: row + 1, col: col + 1)
+
+                let forwardDiagonal = topLeft && bottomRight && !topRight && !bottomLeft
+                let backwardDiagonal = topRight && bottomLeft && !topLeft && !bottomRight
+
+                if forwardDiagonal || backwardDiagonal {
+                    centers.append(GridPoint(x: col + 1, y: row + 1))
+                }
+            }
+        }
+
+        return centers
     }
 
     private static func boundaryLoops(for grid: GridState) -> [[GridPoint]] {
@@ -256,6 +298,36 @@ enum RoundedGridPath {
 
         commands.append("Z")
         return commands.joined(separator: " ")
+    }
+
+    private static func appendDiagonalBridge(at center: CGPoint, radius: CGFloat, to path: CGMutablePath) {
+        let top = CGPoint(x: center.x, y: center.y - radius)
+        let right = CGPoint(x: center.x + radius, y: center.y)
+        let bottom = CGPoint(x: center.x, y: center.y + radius)
+        let left = CGPoint(x: center.x - radius, y: center.y)
+
+        path.move(to: top)
+        path.addQuadCurve(to: right, control: center)
+        path.addQuadCurve(to: bottom, control: center)
+        path.addQuadCurve(to: left, control: center)
+        path.addQuadCurve(to: top, control: center)
+        path.closeSubpath()
+    }
+
+    private static func svgDiagonalBridge(at center: CGPoint, radius: CGFloat) -> String {
+        let top = CGPoint(x: center.x, y: center.y - radius)
+        let right = CGPoint(x: center.x + radius, y: center.y)
+        let bottom = CGPoint(x: center.x, y: center.y + radius)
+        let left = CGPoint(x: center.x - radius, y: center.y)
+
+        return [
+            "M \(svg(top))",
+            "Q \(svg(center)) \(svg(right))",
+            "Q \(svg(center)) \(svg(bottom))",
+            "Q \(svg(center)) \(svg(left))",
+            "Q \(svg(center)) \(svg(top))",
+            "Z",
+        ].joined(separator: " ")
     }
 
     private static func roundedCorners(for points: [CGPoint], radius: CGFloat) -> [RoundedCorner] {
