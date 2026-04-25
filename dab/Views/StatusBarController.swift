@@ -12,7 +12,7 @@ final class StatusBarController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "grid", accessibilityDescription: "dab")
+            button.image = Self.makeMenuBarImage()
         }
 
         let menu = NSMenu()
@@ -76,5 +76,21 @@ final class StatusBarController {
 
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    private static func makeMenuBarImage() -> NSImage? {
+        let pointSize = NSSize(width: 18, height: 18)
+        let fallback = NSImage(systemSymbolName: "square.grid.3x3.fill", accessibilityDescription: "dab")
+
+        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "svg"),
+              let image = NSImage(contentsOf: url) else {
+            fallback?.isTemplate = true
+            return fallback
+        }
+
+        image.size = pointSize
+        image.isTemplate = true
+        image.accessibilityDescription = "dab"
+        return image
     }
 }
