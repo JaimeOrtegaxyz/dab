@@ -20,7 +20,7 @@ private enum WatchFont {
 }
 
 private enum WatchMetrics {
-    static let valueChipWidth: CGFloat = 72
+    static let valueChipWidth: CGFloat = 60
     static let titleBarHeight: CGFloat = 28
 }
 
@@ -56,7 +56,7 @@ private struct LCDChip<Content: View>: View {
             .lineLimit(1)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .frame(width: width, alignment: .trailing)
+            .frame(width: width, alignment: .center)
             .frame(maxWidth: maxWidth, alignment: .trailing)
             .background(WatchTheme.lcdGreen)
             .overlay(
@@ -230,7 +230,6 @@ struct SettingsView: View {
 
     private var watchFooter: some View {
         VStack(spacing: 12) {
-            SilkscreenRule()
             BundleImage(name: "dab-face-regular", ext: "svg")
                 .frame(width: 56, height: 56)
                 .accessibilityLabel("dab face")
@@ -339,6 +338,7 @@ struct SettingsView: View {
                     .textFieldStyle(.plain)
                     .font(WatchFont.body(13, weight: .semibold))
                     .foregroundStyle(WatchTheme.lcdInk)
+                    .multilineTextAlignment(.trailing)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(WatchTheme.lcdGreen)
@@ -412,6 +412,7 @@ struct SettingsView: View {
             shortcutRow("click", "save svg")
             SilkscreenRule()
             shortcutRow("esc", "dismiss overlay")
+            SilkscreenRule()
         }
     }
 
