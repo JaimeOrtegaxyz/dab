@@ -51,6 +51,9 @@ final class StatusBarController {
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true
         window.title = "dab Settings"
+        // Force light appearance so the title text renders dark on the yellow case
+        // (and so any system controls behind the SwiftUI view stay light-themed).
+        window.appearance = NSAppearance(named: .aqua)
 
         // Visual effect background for glassmorphism
         let visualEffect = NSVisualEffectView()

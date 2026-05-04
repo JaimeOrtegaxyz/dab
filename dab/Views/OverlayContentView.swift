@@ -71,7 +71,7 @@ struct OverlayContentView: View {
                 Spacer()
                 Text("\(gridSize)x\(gridSize)")
             }
-            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .font(.custom("Inconsolata", size: 11).weight(.semibold))
             .foregroundColor(.white)
             .padding(.horizontal, 6)
             .frame(width: viewportSize, height: Self.infoBarHeight)

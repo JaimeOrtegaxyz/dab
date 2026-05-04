@@ -1,5 +1,160 @@
 import SwiftUI
 import Carbon
+import AppKit
+
+// MARK: - Watch Theme
+
+private enum WatchTheme {
+    // FEC700 — bright Timex plastic.
+    static let caseYellow = Color(red: 254.0 / 255.0, green: 199.0 / 255.0, blue: 0.0 / 255.0)
+    static let caseInk    = Color(red: 0.07, green: 0.07, blue: 0.07)
+    static let lcdGreen   = Color(red: 0.66, green: 0.78, blue: 0.62)
+    static let lcdInk     = Color(red: 0.06, green: 0.10, blue: 0.06)
+    static let badgeGreen = Color(red: 0.66, green: 0.78, blue: 0.62).opacity(0.55)
+}
+
+private enum WatchFont {
+    static func body(_ size: CGFloat = 11, weight: Font.Weight = .regular) -> Font {
+        .custom("Inconsolata", size: size).weight(weight)
+    }
+}
+
+private enum WatchMetrics {
+    static let valueChipWidth: CGFloat = 72
+    static let titleBarHeight: CGFloat = 28
+}
+
+// MARK: - Bundled image renderer (SVG / PNG)
+
+private struct BundleImage: View {
+    let name: String
+    let ext: String
+    var body: some View {
+        if let url = Bundle.main.url(forResource: name, withExtension: ext),
+           let nsImage = NSImage(contentsOf: url) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+        } else {
+            EmptyView()
+        }
+    }
+}
+
+// MARK: - Reusable components
+
+private struct LCDChip<Content: View>: View {
+    var width: CGFloat? = nil
+    var maxWidth: CGFloat? = nil
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .font(WatchFont.body(13, weight: .semibold))
+            .foregroundStyle(WatchTheme.lcdInk)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .frame(width: width, alignment: .trailing)
+            .frame(maxWidth: maxWidth, alignment: .trailing)
+            .background(WatchTheme.lcdGreen)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(WatchTheme.caseInk, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
+    }
+}
+
+private struct SilkscreenLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text.lowercased())
+            .font(WatchFont.body(11, weight: .heavy))
+            .tracking(1.6)
+            .foregroundStyle(WatchTheme.caseInk)
+    }
+}
+
+private struct SilkscreenRule: View {
+    var body: some View {
+        Rectangle()
+            .fill(WatchTheme.caseInk.opacity(0.85))
+            .frame(height: 1)
+    }
+}
+
+private struct WatchButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(WatchFont.body(11, weight: .heavy))
+            .tracking(1.2)
+            .foregroundStyle(WatchTheme.caseInk)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                configuration.isPressed
+                    ? WatchTheme.caseYellow.opacity(0.55)
+                    : WatchTheme.caseYellow
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(WatchTheme.caseInk, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+}
+
+// MARK: - Custom case-yellow stepper (black arrows, on the left)
+
+private struct CaseStepperButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 9, weight: .black))
+            .foregroundStyle(WatchTheme.caseInk)
+            .frame(width: 20, height: 18)
+            .background(
+                configuration.isPressed
+                    ? WatchTheme.caseYellow.opacity(0.5)
+                    : WatchTheme.caseYellow
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(WatchTheme.caseInk, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+}
+
+private struct CaseStepper<V>: View where V: Strideable & Comparable, V.Stride: SignedNumeric {
+    @Binding var value: V
+    let range: ClosedRange<V>
+    let step: V.Stride
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                let next = value.advanced(by: -step)
+                if next >= range.lowerBound { value = next }
+            } label: {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(CaseStepperButtonStyle())
+
+            Button {
+                let next = value.advanced(by: step)
+                if next <= range.upperBound { value = next }
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(CaseStepperButtonStyle())
+        }
+    }
+}
 
 // MARK: - Settings View
 
@@ -25,19 +180,28 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                Spacer().frame(height: 8)
-
-                settingsContent
-
-                Divider()
-                    .padding(.horizontal, 4)
-
-                aboutSection
+            VStack(alignment: .leading, spacing: 0) {
+                watchHeader
+                VStack(alignment: .leading, spacing: 24) {
+                    settingsContent
+                    watchFooter
+                }
+                .padding(.top, 18)
             }
-            .padding(20)
+            .padding(.horizontal, 24)
+            .padding(.top, WatchMetrics.titleBarHeight + 8)
+            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(.clear)
+        .background(WatchTheme.caseYellow)
+        .tint(WatchTheme.caseInk)
+        .contentMargins(.bottom, 12, for: .scrollIndicators)
+        .overlay(alignment: .top) {
+            WatchTheme.caseYellow
+                .frame(height: WatchMetrics.titleBarHeight)
+                .frame(maxWidth: .infinity)
+                .ignoresSafeArea(edges: .top)
+        }
         .onAppear {
             savePathDisplay = AppSettings.shared.saveDirectory.path
             hotkeyKeyCode = AppSettings.shared.hotkeyKeyCode
@@ -56,241 +220,282 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Header / Footer
+
+    private var watchHeader: some View {
+        BundleImage(name: "dab-text", ext: "svg")
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("dab")
+    }
+
+    private var watchFooter: some View {
+        VStack(spacing: 12) {
+            SilkscreenRule()
+            BundleImage(name: "dab-face-regular", ext: "svg")
+                .frame(width: 56, height: 56)
+                .accessibilityLabel("dab face")
+            VStack(spacing: 6) {
+                Text("turning retina displays into potato displays")
+                    .font(WatchFont.body(11, weight: .medium))
+                    .foregroundStyle(WatchTheme.caseInk)
+                    .multilineTextAlignment(.center)
+                Text(authorAttribution)
+                    .font(WatchFont.body(11, weight: .medium))
+                    .foregroundStyle(WatchTheme.caseInk)
+                    .multilineTextAlignment(.center)
+                Text("v0.4.1")
+                    .font(WatchFont.body(11, weight: .bold))
+                    .foregroundStyle(WatchTheme.caseInk.opacity(0.7))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 4)
+    }
+
+    private var authorAttribution: AttributedString {
+        var attr = AttributedString("hocus-pocused into reality by Jaime Ortega")
+        if let range = attr.range(of: "Jaime Ortega") {
+            attr[range].link = URL(string: "https://www.twitter.com/JaimeOrtega")
+            attr[range].underlineStyle = .single
+            attr[range].font = .custom("Inconsolata", size: 11).weight(.bold)
+            attr[range].foregroundColor = WatchTheme.caseInk
+        }
+        return attr
+    }
+
     // MARK: - Main Settings Content
 
     @ViewBuilder
     private var settingsContent: some View {
-        // Defaults
-        GroupBox {
-            VStack(spacing: 10) {
-                settingsRow("Grid Size") {
-                    Stepper("\(gridSize)x\(gridSize)", value: $gridSize, in: 4...32)
-                        .frame(width: 120)
+        sectionShell("defaults") {
+            settingsRow("grid size") {
+                HStack(spacing: 8) {
+                    CaseStepper(value: $gridSize, range: 4...32, step: 1)
+                    LCDChip(width: WatchMetrics.valueChipWidth) {
+                        Text("\(gridSize)x\(gridSize)")
+                    }
                 }
-                Divider()
-                settingsRow("Viewport Size") {
-                    Stepper("\(Int(viewportSize))px", value: $viewportSize, in: 60...600, step: 10)
-                        .frame(width: 120)
+            }
+            SilkscreenRule()
+            settingsRow("viewport size") {
+                HStack(spacing: 8) {
+                    CaseStepper(value: $viewportSize, range: 60...600, step: 10)
+                    LCDChip(width: WatchMetrics.valueChipWidth) {
+                        Text("\(Int(viewportSize))px")
+                    }
                 }
-                Divider()
-                settingsRow("Resize Step") {
-                    Stepper("\(Int(resizeStep))px", value: $resizeStep, in: 5...50, step: 5)
-                        .frame(width: 120)
+            }
+            SilkscreenRule()
+            settingsRow("resize step") {
+                HStack(spacing: 8) {
+                    CaseStepper(value: $resizeStep, range: 5...50, step: 5)
+                    LCDChip(width: WatchMetrics.valueChipWidth) {
+                        Text("\(Int(resizeStep))px")
+                    }
                 }
-                Divider()
-                settingsRow("Brightness Threshold") {
-                    HStack(spacing: 6) {
-                        Slider(value: $brightnessThreshold, in: 0...1)
-                            .frame(width: 120)
+            }
+            SilkscreenRule()
+            settingsRow("brightness threshold") {
+                HStack(spacing: 8) {
+                    Slider(value: $brightnessThreshold, in: 0...1)
+                        .tint(WatchTheme.caseInk)
+                        .frame(width: 100)
+                    LCDChip(width: WatchMetrics.valueChipWidth) {
                         Text(String(format: "%.2f", brightnessThreshold))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 36, alignment: .trailing)
                     }
-                }
-                Divider()
-                settingsRow("Filter Mode") {
-                    Picker("", selection: $filterModeRaw) {
-                        ForEach(FilterMode.allCases, id: \.rawValue) { mode in
-                            Text(mode.displayName).tag(mode.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 180)
                 }
             }
-            .padding(10)
-        } label: {
-            Label("Defaults", systemImage: "slider.horizontal.3")
-                .font(.headline)
+            SilkscreenRule()
+            settingsRow("filter mode") {
+                lcdPicker(
+                    selection: $filterModeRaw,
+                    options: FilterMode.allCases.map { ($0.rawValue, $0.displayName) },
+                    width: 160
+                )
+            }
         }
 
-        // Mirror
-        GroupBox {
-            VStack(spacing: 10) {
-                settingsRow("Horizontal Mirror") {
-                    Picker("", selection: $horizontalMirrorModeRaw) {
-                        ForEach(HorizontalMirrorMode.allCases, id: \.rawValue) { mode in
-                            Text(mode.displayName).tag(mode.rawValue)
-                        }
+        sectionShell("mirror output") {
+            settingsRow("horizontal") {
+                lcdPicker(
+                    selection: $horizontalMirrorModeRaw,
+                    options: HorizontalMirrorMode.allCases.map { ($0.rawValue, $0.displayName) },
+                    width: 160
+                )
+            }
+            SilkscreenRule()
+            settingsRow("vertical") {
+                lcdPicker(
+                    selection: $verticalMirrorModeRaw,
+                    options: VerticalMirrorMode.allCases.map { ($0.rawValue, $0.displayName) },
+                    width: 160
+                )
+            }
+        }
+
+        sectionShell("output") {
+            settingsRow("filename format") {
+                TextField("", text: $filenameFormat)
+                    .textFieldStyle(.plain)
+                    .font(WatchFont.body(13, weight: .semibold))
+                    .foregroundStyle(WatchTheme.lcdInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(WatchTheme.lcdGreen)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(WatchTheme.caseInk, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .frame(width: 220)
+                    .focused($isFilenameFieldFocused)
+                    .onSubmit {
+                        isFilenameFieldFocused = false
                     }
-                    .labelsHidden()
-                    .frame(width: 140)
-                }
-                Divider()
-                settingsRow("Vertical Mirror") {
-                    Picker("", selection: $verticalMirrorModeRaw) {
-                        ForEach(VerticalMirrorMode.allCases, id: \.rawValue) { mode in
-                            Text(mode.displayName).tag(mode.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 140)
+            }
+            HStack {
+                Spacer()
+                Text("tokens: {date} {time} {grid} {timestamp}")
+                    .font(WatchFont.body(9, weight: .medium))
+                    .foregroundStyle(WatchTheme.caseInk.opacity(0.6))
+            }
+            SilkscreenRule()
+            settingsRow("preview") {
+                LCDChip(maxWidth: 220) {
+                    Text(filenamePreview)
+                        .truncationMode(.tail)
                 }
             }
-            .padding(10)
-        } label: {
-            Label("Mirror Output", systemImage: "arrow.left.and.right.righttriangle.left.righttriangle.right")
-                .font(.headline)
-        }
-
-        // Output
-        GroupBox {
-            VStack(spacing: 10) {
-                settingsRow("Filename Format") {
-                    TextField("", text: $filenameFormat)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 200)
-                        .focused($isFilenameFieldFocused)
-                        .onSubmit {
-                            isFilenameFieldFocused = false
-                        }
-                }
-                HStack {
-                    Text("Tokens: {date} {time} {grid} {timestamp}")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                    Spacer()
-                    Text("Preview: \(filenamePreview)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Divider()
-                settingsRow("Save Location") {
-                    HStack(spacing: 6) {
+            SilkscreenRule()
+            settingsRow("save location") {
+                HStack(spacing: 8) {
+                    LCDChip(maxWidth: 150) {
                         Text(savePathDisplay)
-                            .font(.caption)
-                            .lineLimit(1)
                             .truncationMode(.head)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: 160, alignment: .trailing)
-                        Button("Choose...") {
-                            isFilenameFieldFocused = false
-                            chooseSaveDirectory()
-                        }
-                        .controlSize(.small)
                     }
+                    Button("choose…") {
+                        isFilenameFieldFocused = false
+                        chooseSaveDirectory()
+                    }
+                    .buttonStyle(WatchButtonStyle())
                 }
             }
-            .padding(10)
-        } label: {
-            Label("Output", systemImage: "square.and.arrow.down")
-                .font(.headline)
         }
 
-        // Hotkey
-        GroupBox {
-            VStack(spacing: 10) {
-                settingsRow("Activation Hotkey") {
-                    if isRecordingHotkey {
-                        HStack(spacing: 6) {
-                            Text("Press shortcut...")
-                                .foregroundStyle(.orange)
-                                .font(.system(.body, design: .rounded))
-                            Button("Cancel") {
-                                stopRecording()
-                            }
-                            .controlSize(.small)
-                        }
-                    } else {
-                        HStack(spacing: 6) {
-                            Text(hotkeyDisplayString)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(.quaternary)
-                                .clipShape(RoundedRectangle(cornerRadius: 5))
-                                .font(.system(.body, design: .monospaced))
-                            Button("Record") {
-                                isFilenameFieldFocused = false
-                                startRecording()
-                            }
-                            .controlSize(.small)
-                        }
-                    }
-                }
+        sectionShell("hotkey") {
+            settingsRow("activation") {
+                hotkeyControl
             }
-            .padding(10)
-        } label: {
-            Label("Hotkey", systemImage: "keyboard")
-                .font(.headline)
         }
 
-        // Keyboard Shortcuts Reference
-        GroupBox {
-            VStack(spacing: 6) {
-                shortcutRow("Left / Right", "Resize viewport")
-                Divider()
-                shortcutRow("Up / Down", "Change grid size")
-                Divider()
-                shortcutRow("+ / -", "Adjust threshold")
-                Divider()
-                shortcutRow("Shift + arrows / +/-", "Larger jumps")
-                Divider()
-                shortcutRow("Space", "Toggle negative")
-                Divider()
-                shortcutRow("R", "Toggle round mode")
-                Divider()
-                shortcutRow("H", "Cycle horizontal mirror")
-                Divider()
-                shortcutRow("V", "Cycle vertical mirror")
-                Divider()
-                shortcutRow("1-8", "Select filter mode")
-                Divider()
-                shortcutRow("F", "Cycle filter mode")
-                Divider()
-                shortcutRow("Click", "Save SVG")
-                Divider()
-                shortcutRow("Esc", "Dismiss overlay")
-            }
-            .padding(10)
-        } label: {
-            Label("Overlay Shortcuts", systemImage: "command")
-                .font(.headline)
+        sectionShell("overlay shortcuts") {
+            shortcutRow("left / right", "resize viewport")
+            SilkscreenRule()
+            shortcutRow("up / down", "change grid size")
+            SilkscreenRule()
+            shortcutRow("+ / -", "adjust threshold")
+            SilkscreenRule()
+            shortcutRow("shift + arrows / +/-", "larger jumps")
+            SilkscreenRule()
+            shortcutRow("space", "toggle negative")
+            SilkscreenRule()
+            shortcutRow("r", "toggle round mode")
+            SilkscreenRule()
+            shortcutRow("h", "cycle horizontal mirror")
+            SilkscreenRule()
+            shortcutRow("v", "cycle vertical mirror")
+            SilkscreenRule()
+            shortcutRow("1-8", "select filter mode")
+            SilkscreenRule()
+            shortcutRow("f", "cycle filter mode")
+            SilkscreenRule()
+            shortcutRow("click", "save svg")
+            SilkscreenRule()
+            shortcutRow("esc", "dismiss overlay")
         }
     }
 
-    // MARK: - About Section
+    // MARK: - Hotkey control (tap-to-record)
 
-    private var aboutSection: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(.linearGradient(
-                        colors: [Color.black, Color.gray.opacity(0.7)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(width: 64, height: 64)
-                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-
-                Canvas { context, size in
-                    let cellSize = size.width / 4
-                    let pattern: [(Int, Int)] = [(0,0),(0,2),(1,1),(1,3),(2,0),(2,2),(3,1),(3,3)]
-                    for (r, c) in pattern {
-                        let rect = CGRect(x: CGFloat(c) * cellSize + 3,
-                                          y: CGFloat(r) * cellSize + 3,
-                                          width: cellSize - 2,
-                                          height: cellSize - 2)
-                        context.fill(Path(rect), with: .color(.white))
-                    }
+    private var hotkeyControl: some View {
+        Button {
+            if isRecordingHotkey {
+                stopRecording()
+            } else {
+                isFilenameFieldFocused = false
+                startRecording()
+            }
+        } label: {
+            if isRecordingHotkey {
+                HStack(spacing: 6) {
+                    Text("press shortcut…")
+                        .font(WatchFont.body(13, weight: .semibold))
+                        .foregroundStyle(WatchTheme.caseInk)
+                    Text("esc to cancel")
+                        .font(WatchFont.body(9, weight: .medium))
+                        .foregroundStyle(WatchTheme.caseInk.opacity(0.55))
                 }
-                .frame(width: 56, height: 56)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(WatchTheme.caseInk,
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                )
+            } else {
+                LCDChip { Text(hotkeyDisplayString.lowercased()) }
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("dab")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                Text("Version 1.0")
-                    .font(.system(.subheadline))
-                    .foregroundStyle(.secondary)
-                Text("Turning retina displays into potato displays")
-                    .font(.system(.caption))
-                    .foregroundStyle(.tertiary)
-            }
-
-            Spacer()
         }
-        .padding(.vertical, 8)
+        .buttonStyle(.plain)
+        .help(isRecordingHotkey ? "click or press esc to cancel" : "click to record a new shortcut")
+    }
+
+    // MARK: - Section / Picker Helpers
+
+    @ViewBuilder
+    private func sectionShell<Content: View>(_ title: String,
+                                             @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SilkscreenLabel(title)
+            VStack(spacing: 8) {
+                content()
+            }
+        }
+    }
+
+    private func lcdPicker<T: Hashable>(selection: Binding<T>,
+                                        options: [(T, String)],
+                                        width: CGFloat) -> some View {
+        Menu {
+            ForEach(options, id: \.0) { (value, label) in
+                Button(label) { selection.wrappedValue = value }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                let currentLabel = options.first { $0.0 == selection.wrappedValue }?.1 ?? "—"
+                Text(currentLabel.lowercased())
+                    .font(WatchFont.body(13, weight: .semibold))
+                    .foregroundStyle(WatchTheme.lcdInk)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(WatchTheme.lcdInk)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .frame(width: width)
+            .background(WatchTheme.lcdGreen)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(WatchTheme.caseInk, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     // MARK: - Hotkey Recording
@@ -324,12 +529,14 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Row Helpers
 
     private func settingsRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack {
-            Text(label)
-                .foregroundStyle(.primary)
+            Text(label.lowercased())
+                .font(WatchFont.body(11, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(WatchTheme.caseInk)
             Spacer()
             content()
         }
@@ -337,16 +544,18 @@ struct SettingsView: View {
 
     private func shortcutRow(_ key: String, _ action: String) -> some View {
         HStack {
-            Text(key)
-                .font(.system(.caption, design: .monospaced, weight: .medium))
+            Text(key.lowercased())
+                .font(WatchFont.body(11, weight: .regular))
+                .foregroundStyle(.white)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(.quaternary)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .background(WatchTheme.caseInk)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
             Spacer()
-            Text(action)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(action.lowercased())
+                .font(WatchFont.body(10, weight: .medium))
+                .tracking(0.6)
+                .foregroundStyle(WatchTheme.caseInk.opacity(0.85))
         }
     }
 

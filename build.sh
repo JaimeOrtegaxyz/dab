@@ -76,7 +76,7 @@ cp "dab/App/Info.plist" "${CONTENTS}/Info.plist"
 
 if [[ -d "${SOURCE_RESOURCES}" ]]; then
     find "${SOURCE_RESOURCES}" -type f \
-        \( -name '*.icns' -o -name '*.svg' -o -name '*.pdf' -o -name '*.png' \) \
+        \( -name '*.icns' -o -name '*.svg' -o -name '*.pdf' -o -name '*.png' -o -name '*.ttf' -o -name '*.otf' \) \
         ! -path "*/AppIcon.iconset/*" \
         -exec cp {} "${RESOURCES}/" \;
 fi
