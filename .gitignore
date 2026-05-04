@@ -21,3 +21,4 @@ node_modules/
 .swiftpm/
 .worktreeinclude
 dab.app/
+dist/
