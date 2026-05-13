@@ -1,23 +1,29 @@
 #!/bin/bash
 #
-# release.sh — build, sign with Developer ID, notarize, and (if Xcode's
-# stapler is available) staple dab.app for distribution. Outputs
-# dist/dab-<version>.zip ready for upload to GitHub Releases.
+# release.sh — build, sign with Developer ID, notarize, staple,
+# package as a DMG, and EdDSA-sign with Sparkle's key. Outputs
+# dist/dab-<version>.dmg ready for upload to GitHub Releases, plus
+# dist/dab-<version>.sig.txt with the Sparkle signature line to paste
+# into docs/appcast.xml.
 #
 # Usage:
 #   ./release.sh <version>
-#   e.g. ./release.sh 0.4.1-beta
+#   e.g. ./release.sh 0.4.2-beta
 #
-# One-time setup (stores notary credentials in the keychain so this
-# script can submit unattended):
+# Prerequisites (one-time):
 #
-#   xcrun notarytool store-credentials dab-notary \
-#     --apple-id <your-apple-id> \
-#     --team-id GU57FJMCH4 \
-#     --password <app-specific-password>
+# 1. Notary credentials in the keychain:
+#      xcrun notarytool store-credentials dab-notary \
+#        --apple-id <your-apple-id> \
+#        --team-id GU57FJMCH4 \
+#        --password <app-specific-password>
 #
-# Generate the app-specific password at https://appleid.apple.com
-#   Account -> Sign-In and Security -> App-Specific Passwords
+# 2. Sparkle EdDSA private key in the keychain:
+#      .build/artifacts/sparkle/Sparkle/bin/generate_keys
+#    (run once; back up immediately, see RELEASE_GUIDE.md)
+#
+# 3. Homebrew create-dmg:
+#      brew install create-dmg
 
 set -euo pipefail
 
@@ -26,59 +32,106 @@ TEAM_ID="GU57FJMCH4"
 NOTARY_PROFILE="dab-notary"
 ENTITLEMENTS="dab.entitlements"
 APP_BUNDLE="dab.app"
+SPARKLE_BIN=".build/artifacts/sparkle/Sparkle/bin"
 
 if [[ $# -lt 1 ]]; then
     echo "Usage: ./release.sh <version>"
-    echo "Example: ./release.sh 0.4.1-beta"
+    echo "Example: ./release.sh 0.4.2-beta"
     exit 1
 fi
 
 VERSION="$1"
-ZIP="dist/dab-${VERSION}.zip"
+DMG="dist/dab-${VERSION}.dmg"
+SIG="dist/dab-${VERSION}.sig.txt"
 
-# 1. Build via build.sh (ad-hoc dev sign — we re-sign below).
+# 1. Build via build.sh. Produces dab.app with Sparkle.framework
+#    embedded, rpath patched, and ad-hoc dev signature applied (we
+#    overwrite that with Developer ID below).
 echo "==> Building dab.app via build.sh"
 ./build.sh
 
-# 2. Re-sign with Developer ID + hardened runtime + secure timestamp.
-#    --force overrides the dev-cert signature build.sh applied.
-echo "==> Re-signing with Developer ID + hardened runtime"
+if [[ ! -x "${SPARKLE_BIN}/sign_update" ]]; then
+    echo "Sparkle's sign_update tool not found at ${SPARKLE_BIN}/sign_update."
+    echo "Run 'swift build -c release' to fetch the Sparkle artifact."
+    exit 1
+fi
+
+# 2. Re-sign Sparkle.framework with Developer ID + hardened runtime +
+#    timestamp. --deep is the canonical recipe for Sparkle 2: the
+#    framework has nested bundles at Versions/B/ (Updater.app,
+#    Autoupdate.app, XPCServices/) that the default codesign rules
+#    don't traverse. Without --deep only the framework's main binary
+#    and ~6 resource files get sealed; with it all 78 inner files do.
+echo "==> Re-signing Sparkle.framework with Developer ID (--deep)"
+codesign --force --deep --options runtime --timestamp \
+    --sign "${SIGN_ID}" \
+    "${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework"
+
+# 3. Re-sign the outer dab.app. Hardened runtime + timestamp are
+#    required for notarization.
+echo "==> Re-signing outer dab.app with Developer ID + hardened runtime"
 codesign --force --options runtime --timestamp \
     --entitlements "${ENTITLEMENTS}" \
     --sign "${SIGN_ID}" \
     "${APP_BUNDLE}"
 codesign --verify --strict --verbose=2 "${APP_BUNDLE}"
 
-# 3. Zip for notary submission. ditto preserves bundle structure;
-#    plain `zip` mangles it.
+# 4. Build the DMG. We use DMG (not zip) because zip extraction by
+#    Finder creates AppleDouble files (._Current) next to the
+#    Versions/Current symlink inside Sparkle.framework. Those files
+#    aren't covered by the framework's seal, and spctl then rejects
+#    with "unsealed contents present in the root directory of an
+#    embedded framework". DMGs preserve the bundle byte-for-byte.
 mkdir -p dist
-rm -f "${ZIP}"
-echo "==> Zipping for notary submission"
-ditto -c -k --keepParent "${APP_BUNDLE}" "${ZIP}"
+rm -f "${DMG}"
+echo "==> Building DMG with create-dmg"
+create-dmg \
+    --volname "dab" \
+    --window-pos 200 120 \
+    --window-size 600 400 \
+    --icon-size 110 \
+    --icon "${APP_BUNDLE}" 165 200 \
+    --app-drop-link 435 200 \
+    --hide-extension "${APP_BUNDLE}" \
+    --no-internet-enable \
+    "${DMG}" \
+    "${APP_BUNDLE}"
 
-# 4. Submit to Apple's notary service and wait for the verdict.
-echo "==> Submitting to Apple notary service (this can take 1-15 min)"
-xcrun notarytool submit "${ZIP}" \
+# 5. Submit the DMG to Apple's notary service and wait for the verdict.
+echo "==> Submitting DMG to Apple notary service (this can take 1-15 min)"
+xcrun notarytool submit "${DMG}" \
     --keychain-profile "${NOTARY_PROFILE}" \
     --wait
 
-# 5. Staple the ticket onto the bundle if the Xcode stapler is around,
-#    then re-zip so the distributable contains the stapled bundle.
-echo "==> Notarization accepted. Attempting to staple"
-if xcrun --find stapler >/dev/null 2>&1; then
-    xcrun stapler staple "${APP_BUNDLE}"
-    rm "${ZIP}"
-    ditto -c -k --keepParent "${APP_BUNDLE}" "${ZIP}"
-    echo "==> Stapled and re-zipped"
-else
-    echo "==> stapler not found (full Xcode required); shipping without"
-    echo "    staple. Online Gatekeeper verification will still pass."
-fi
+# 6. Staple the notarization ticket onto the DMG itself, so Gatekeeper
+#    can verify offline at first launch (mounted DMG -> inner .app
+#    inherits the ticket via the disk image's notarization metadata).
+echo "==> Stapling notarization ticket to DMG"
+xcrun stapler staple "${DMG}"
 
-# 6. Final assessment for the operator.
+# 7. Sign the DMG with Sparkle's EdDSA private key. The signature line
+#    is what goes into the appcast's <enclosure> tag. This is a
+#    separate trust path from Apple's notarization — even if Apple's
+#    notary were compromised, Sparkle verifies our specific approval
+#    of this exact byte sequence using the public key baked into the
+#    installed app.
+echo "==> Signing DMG with Sparkle EdDSA key"
+"${SPARKLE_BIN}/sign_update" "${DMG}" > "${SIG}"
+
+# 8. Final Gatekeeper sanity check on the inner app (mounted DMGs
+#    inherit the staple, so spctl on the .app inside should accept).
 echo "==> Final Gatekeeper assessment:"
 spctl -a -vvv -t install "${APP_BUNDLE}" || true
 
 echo ""
-echo "Release ready: ${ZIP}"
-echo "Next: gh release create v${VERSION} ${ZIP} --title v${VERSION} --prerelease"
+echo "Release artifacts:"
+echo "  DMG:       ${DMG}"
+echo "  Sparkle:   ${SIG}"
+echo ""
+echo "Next steps:"
+echo "  1. gh release create v${VERSION} ${DMG} --title v${VERSION} --prerelease"
+echo "  2. Add a new <item> block to docs/appcast.xml with:"
+echo "       sparkle:version=${VERSION}"
+echo "       enclosure url pointing at the release asset"
+echo "       enclosure attrs from ${SIG}"
+echo "  3. git add docs/appcast.xml && git commit && git push"

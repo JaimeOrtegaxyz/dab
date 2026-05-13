@@ -1,0 +1,37 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     version="2.0">
+    <channel>
+        <title>dab</title>
+        <link>https://jaimeortegaxyz.github.io/dab/appcast.xml</link>
+        <description>Auto-update feed for dab</description>
+        <language>en</language>
+
+        <!--
+          Releases (most recent first). For each new release, prepend
+          an <item> block in the shape below, populated from
+          dist/dab-<version>.sig.txt and the GitHub release URL.
+
+          See RELEASE_GUIDE.md for the full release procedure.
+
+          <item>
+              <title>vX.Y.Z</title>
+              <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/vX.Y.Z</link>
+              <sparkle:version>X.Y.Z</sparkle:version>
+              <sparkle:shortVersionString>X.Y.Z</sparkle:shortVersionString>
+              <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+              <pubDate>Sat, 09 May 2026 12:00:00 +0000</pubDate>
+              <description><![CDATA[
+                  <p>What changed in this release.</p>
+              ]]></description>
+              <enclosure
+                  url="https://github.com/JaimeOrtegaxyz/dab/releases/download/vX.Y.Z/dab-X.Y.Z.dmg"
+                  sparkle:edSignature="..."
+                  length="..."
+                  type="application/octet-stream" />
+          </item>
+        -->
+
+    </channel>
+</rss>
