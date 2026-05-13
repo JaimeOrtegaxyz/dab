@@ -1,11 +1,13 @@
 import AppKit
 import CoreGraphics
+import Sparkle
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusBarController = StatusBarController()
     private let hotkeyManager = HotkeyManager()
     private let viewModel = CaptureViewModel()
+    private var updaterController: SPUStandardUpdaterController!
     private var overlayWindow: OverlayWindow?
     private var eventTap: CFMachPort?
     private var eventTapRunLoopSource: CFRunLoopSource?
@@ -17,6 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastExternalApplication: NSRunningApplication?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+
+        statusBarController.updaterController = updaterController
         statusBarController.setup()
         statusBarController.onActivate = { [weak self] in
             self?.toggleOverlay()

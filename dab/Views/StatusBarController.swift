@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 
 final class StatusBarController {
@@ -7,6 +8,7 @@ final class StatusBarController {
 
     var onActivate: (() -> Void)?
     var onHotkeyChanged: ((UInt32, UInt32) -> Void)?
+    var updaterController: SPUStandardUpdaterController?
 
     func setup() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -19,10 +21,21 @@ final class StatusBarController {
         menu.addItem(NSMenuItem(title: "Capture", action: #selector(activateCapture), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+
+        let updatesItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+            keyEquivalent: ""
+        )
+        updatesItem.target = updaterController
+        menu.addItem(updatesItem)
+
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit dab", action: #selector(quit), keyEquivalent: "q"))
 
-        for item in menu.items {
+        // Target self for the items we own; the update item already has its
+        // target set to updaterController above.
+        for item in menu.items where item.target == nil && item.action != nil {
             item.target = self
         }
 

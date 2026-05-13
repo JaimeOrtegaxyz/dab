@@ -26,5 +26,9 @@
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>dab needs screen recording permission to capture screen content for pixelation.</string>
+	<key>SUFeedURL</key>
+	<string>https://jaimeortegaxyz.github.io/dab/appcast.xml</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>
