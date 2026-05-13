@@ -6,7 +6,7 @@ It is intentionally more interpretive than a technical spec. Some parts below ar
 
 ## One-Paragraph Summary
 
-dab is a macOS menu bar utility that lets a user sample a live area of their screen around the cursor, reduce it to a small monochrome pixel grid, preview the result in real time, and export that result as an SVG made of exact square cells. It was built first as the icon-making tool for a separate project, Surface & Logic, and second as something that can be open-sourced for others who want to explore a similar visual language. The app is not trying to be a full image editor. It is a fast reduction tool: summon it, hover over something interesting, tune the simplification, and save a crisp black-on-transparent pixel interpretation of that moment.
+dab is a macOS menu bar utility that lets a user sample a live area of their screen around the cursor, reduce it to a small palette-mapped pixel grid, preview the result in real time, and export that result as an SVG made of exact square cells. It was built first as the icon-making tool for a separate project, Surface & Logic, and second as something that can be open-sourced for others who want to explore a similar visual language. The app is not trying to be a full image editor. It is a fast reduction tool: summon it, hover over something interesting, tune the simplification, and save a crisp color SVG interpretation of that moment.
 
 ## Stable Product Facts
 
@@ -17,22 +17,22 @@ These are true of the current app as implemented.
 - When activated, it opens a floating preview window near the cursor and samples the screen area around that cursor position.
 - The preview updates live as the mouse moves.
 - The sampled image is reduced to a square grid.
-- Each cell ends up binary: black or transparent/empty.
-- The user can change grid size, viewport size, resize step, brightness threshold, filter mode, horizontal flip, vertical flip, save location, filename format, and activation hotkey.
+- Each cell maps to one swatch from an editable palette, or to a transparent swatch when the palette includes one.
+- The default palette is black, green, red, yellow, and blue.
+- The user can change grid size, viewport size, resize step, brightness threshold, filter mode, palette colors, horizontal flip, vertical flip, save location, filename format, and activation hotkey.
 - The user can invert the preview into a negative mode while the overlay is active.
 - The user can save the current result as an SVG.
-- The current SVG export is deliberately literal: each active pixel becomes its own 1x1 square in the SVG grid, with no geometry merging.
+- The current square-cell SVG export is deliberately literal: each non-transparent pixel becomes its own 1x1 square in the SVG grid, with no geometry merging.
 - The export background is transparent.
 - The app exists first as an internal tool for generating iconography for Surface & Logic, and then as a tool that can be shared publicly.
-- The app currently offers eight filters:
+- The app currently offers seven filters:
+  - Color Match
   - Threshold
   - Otsu
   - Adaptive
   - Contrast
   - Clean
   - Outline
-  - Floyd-Steinberg
-  - Ordered Dither
 
 ## Origin Story And Why It Matters
 
@@ -62,13 +62,13 @@ The surface side of dab is obvious:
 
 - bold pixel forms
 - strong reduction
-- graphic black-and-transparent output
+- graphic palette-constrained output
 - a playful, stylized result
 
 The logic side is equally important:
 
 - exact square cells
-- binary black-or-transparent decisions
+- exact palette decisions
 - repeatable filters
 - strict grid structure
 - predictable SVG output
@@ -127,8 +127,8 @@ The output is not just "an SVG export of a screenshot." It is a very particular 
 
 - square grid
 - uniform cell size
-- black-only active cells
-- transparent inactive cells
+- palette-colored active cells
+- optional transparent cells
 - no anti-aliased geometry
 - no soft edges
 - no shape-merging logic
@@ -151,21 +151,17 @@ That means downstream uses can include:
 
 ## The Role Of Filters
 
-The filters are not just "effects." They are alternate decision systems for how to reduce a captured area into a binary grid.
+The filters are not just "effects." They are alternate decision systems for how to reduce a captured area into a palette grid.
 
-The most practical filters are the first five:
+The filters are:
 
-- Threshold: direct and manual
-- Otsu: automatic global thresholding
-- Adaptive: local thresholding for uneven lighting or contrast
-- Contrast: boosts local usability when the source is washed out or low-contrast
-- Clean: aims for stronger, more readable tiny-grid outputs by simplifying noise
-
-The later filters are more stylized:
-
+- Color Match: maps cells to the nearest non-transparent palette color, with transparent handled as an ordered brightness band when present
+- Threshold: maps brightness into ordered palette bands
+- Otsu: automatically derives brightness bands from the sampled image
+- Adaptive: maps local contrast into ordered palette bands
+- Contrast: boosts low-contrast samples before palette matching
+- Clean: simplifies color noise through neighborhood cleanup
 - Outline: focuses on edges and boundaries
-- Floyd-Steinberg: error-diffusion dithering
-- Ordered Dither: patterned thresholding
 
 If another LLM is asked to propose future filters, the guiding question should be:
 
@@ -263,7 +259,7 @@ Examples of the kind of framing that fits:
 
 - a live pixel sampler
 - a screen-to-grid reduction tool
-- a way to turn on-screen detail into crisp monochrome SVGs
+- a way to turn on-screen detail into crisp palette SVGs
 - a utility for stealing tiny visual systems from your screen
 - a menu bar tool for reducing anything on screen into exportable pixel vectors
 
@@ -273,12 +269,12 @@ If another LLM is asked to propose visual ideas for the project, it should under
 
 - grids
 - squares
-- black and transparent logic
+- palette and transparent-swatch logic
 - high-density to low-density transformation
 - sampling windows
 - cropping
 - cursor-centric capture
-- binary decisions
+- palette decisions
 - live reduction
 
 Promising visual directions:
@@ -287,7 +283,7 @@ Promising visual directions:
 - magnified cell structures
 - before/after density contrasts
 - tiny viewports blown up big
-- harsh black/white systems with one accent color
+- constrained color systems with one to eight swatches
 - UI motifs based on loupe, cursor, crop, scan, or capture logic
 - logos or marks built from modular cell clusters
 
@@ -319,7 +315,7 @@ These are useful for ideation because they define the real boundaries of the cur
 - It depends on Screen Recording permission.
 - It captures around the cursor, not from a standalone canvas.
 - The current output format is SVG.
-- The output is monochrome and binary.
+- The output is palette-constrained, with up to eight swatches and optional transparency.
 - The app is optimized around live preview and one-click save, not post-processing.
 - The preview is fundamentally grid-based, so the right creative ideas are ones that respect the grid rather than trying to hide it.
 
@@ -328,7 +324,7 @@ These are useful for ideation because they define the real boundaries of the cur
 If another LLM receives this file and is asked to generate ideas, it should assume the following unless told otherwise:
 
 - The point is to make reduction feel intentional and artistically useful.
-- The output should stay crisp, square, and binary.
+- The output should stay crisp, square, and palette-constrained.
 - Simplicity beats feature bloat.
 - Fast interaction beats deep configuration.
 - The best ideas are those that strengthen the app as a small sharp utility, not as a sprawling editor.
@@ -338,13 +334,13 @@ If another LLM receives this file and is asked to generate ideas, it should assu
 
 If a downstream workflow needs a compact summary, this is a good default:
 
-dab is a macOS menu bar tool that samples the screen under your cursor, reduces it into a live monochrome pixel grid, and exports the result as crisp square-cell SVG.
+dab is a macOS menu bar tool that samples the screen under your cursor, reduces it into a live palette-mapped pixel grid, and exports the result as crisp square-cell SVG.
 
 ## Useful Expanded Description
 
 If a downstream workflow needs a more expressive summary, this is a good default:
 
-dab turns any part of your screen into a tiny black-and-transparent pixel composition. You trigger it, hover over something interesting, watch a live reduced preview follow the cursor, tune the interpretation with different filters and controls, and click once to save a crisp SVG made from exact square cells. It is less like a full editor and more like a fast visual reduction instrument for designers, artists, and anyone who wants to extract graphic structure from on-screen detail.
+dab turns any part of your screen into a tiny palette-constrained pixel composition. You trigger it, hover over something interesting, watch a live reduced preview follow the cursor, tune the interpretation with different filters, palette swatches, and controls, and click once to save a crisp SVG made from exact square cells. It is less like a full editor and more like a fast visual reduction instrument for designers, artists, and anyone who wants to extract graphic structure from on-screen detail.
 
 ## Open Interpretive Space
 

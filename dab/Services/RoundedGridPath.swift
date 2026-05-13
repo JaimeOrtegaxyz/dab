@@ -75,10 +75,10 @@ enum RoundedGridPath {
         }
     }
 
-    static func cgPath(for grid: GridState, in rect: CGRect) -> CGPath {
+    static func cgPath(for grid: GridState, in rect: CGRect, matchingPaletteIndex: Int? = nil) -> CGPath {
         let path = CGMutablePath()
-        let loops = simplifiedBoundaryLoops(for: grid)
-        let bridgeCenters = diagonalBridgeCenters(for: grid)
+        let loops = simplifiedBoundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex)
+        let bridgeCenters = diagonalBridgeCenters(for: grid, matchingPaletteIndex: matchingPaletteIndex)
         guard !loops.isEmpty || !bridgeCenters.isEmpty else { return path }
 
         let cellWidth = rect.width / CGFloat(grid.size)
@@ -109,8 +109,8 @@ enum RoundedGridPath {
         return path
     }
 
-    static func svgBoundaryPathData(for grid: GridState) -> String {
-        simplifiedBoundaryLoops(for: grid)
+    static func svgBoundaryPathData(for grid: GridState, matchingPaletteIndex: Int? = nil) -> String {
+        simplifiedBoundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex)
             .map { loop in
                 let points = loop.map { CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)) }
                 return svgPath(for: points, radius: 0.5)
@@ -118,27 +118,27 @@ enum RoundedGridPath {
             .joined(separator: " ")
     }
 
-    static func svgBridgePathData(for grid: GridState) -> String {
-        diagonalBridgeCenters(for: grid)
+    static func svgBridgePathData(for grid: GridState, matchingPaletteIndex: Int? = nil) -> String {
+        diagonalBridgeCenters(for: grid, matchingPaletteIndex: matchingPaletteIndex)
             .map { svgDiagonalBridge(at: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)), radius: 0.5) }
             .joined(separator: " ")
     }
 
-    private static func simplifiedBoundaryLoops(for grid: GridState) -> [[GridPoint]] {
-        boundaryLoops(for: grid).map(simplify)
+    private static func simplifiedBoundaryLoops(for grid: GridState, matchingPaletteIndex: Int?) -> [[GridPoint]] {
+        boundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex).map(simplify)
     }
 
-    private static func diagonalBridgeCenters(for grid: GridState) -> [GridPoint] {
+    private static func diagonalBridgeCenters(for grid: GridState, matchingPaletteIndex: Int?) -> [GridPoint] {
         guard grid.size >= 2 else { return [] }
 
         var centers: [GridPoint] = []
 
         for row in 0..<(grid.size - 1) {
             for col in 0..<(grid.size - 1) {
-                let topLeft = grid.effectiveCell(row: row, col: col)
-                let topRight = grid.effectiveCell(row: row, col: col + 1)
-                let bottomLeft = grid.effectiveCell(row: row + 1, col: col)
-                let bottomRight = grid.effectiveCell(row: row + 1, col: col + 1)
+                let topLeft = isActive(grid, row: row, col: col, matchingPaletteIndex: matchingPaletteIndex)
+                let topRight = isActive(grid, row: row, col: col + 1, matchingPaletteIndex: matchingPaletteIndex)
+                let bottomLeft = isActive(grid, row: row + 1, col: col, matchingPaletteIndex: matchingPaletteIndex)
+                let bottomRight = isActive(grid, row: row + 1, col: col + 1, matchingPaletteIndex: matchingPaletteIndex)
 
                 let forwardDiagonal = topLeft && bottomRight && !topRight && !bottomLeft
                 let backwardDiagonal = topRight && bottomLeft && !topLeft && !bottomRight
@@ -152,8 +152,8 @@ enum RoundedGridPath {
         return centers
     }
 
-    private static func boundaryLoops(for grid: GridState) -> [[GridPoint]] {
-        let edges = boundaryEdges(for: grid)
+    private static func boundaryLoops(for grid: GridState, matchingPaletteIndex: Int?) -> [[GridPoint]] {
+        let edges = boundaryEdges(for: grid, matchingPaletteIndex: matchingPaletteIndex)
         guard !edges.isEmpty else { return [] }
 
         var outgoing = [GridPoint: [Int]]()
@@ -201,27 +201,44 @@ enum RoundedGridPath {
         return loops
     }
 
-    private static func boundaryEdges(for grid: GridState) -> [Edge] {
+    private static func boundaryEdges(for grid: GridState, matchingPaletteIndex: Int?) -> [Edge] {
         var edges: [Edge] = []
 
         for row in 0..<grid.size {
-            for col in 0..<grid.size where grid.effectiveCell(row: row, col: col) {
-                if !grid.effectiveCell(row: row - 1, col: col) {
+            for col in 0..<grid.size where isActive(grid, row: row, col: col, matchingPaletteIndex: matchingPaletteIndex) {
+                if !isActive(grid, row: row - 1, col: col, matchingPaletteIndex: matchingPaletteIndex) {
                     edges.append(Edge(start: GridPoint(x: col, y: row), end: GridPoint(x: col + 1, y: row)))
                 }
-                if !grid.effectiveCell(row: row, col: col + 1) {
+                if !isActive(grid, row: row, col: col + 1, matchingPaletteIndex: matchingPaletteIndex) {
                     edges.append(Edge(start: GridPoint(x: col + 1, y: row), end: GridPoint(x: col + 1, y: row + 1)))
                 }
-                if !grid.effectiveCell(row: row + 1, col: col) {
+                if !isActive(grid, row: row + 1, col: col, matchingPaletteIndex: matchingPaletteIndex) {
                     edges.append(Edge(start: GridPoint(x: col + 1, y: row + 1), end: GridPoint(x: col, y: row + 1)))
                 }
-                if !grid.effectiveCell(row: row, col: col - 1) {
+                if !isActive(grid, row: row, col: col - 1, matchingPaletteIndex: matchingPaletteIndex) {
                     edges.append(Edge(start: GridPoint(x: col, y: row + 1), end: GridPoint(x: col, y: row)))
                 }
             }
         }
 
         return edges
+    }
+
+    private static func isActive(
+        _ grid: GridState,
+        row: Int,
+        col: Int,
+        matchingPaletteIndex: Int?
+    ) -> Bool {
+        guard let paletteIndex = grid.effectivePaletteIndex(row: row, col: col) else {
+            return false
+        }
+
+        guard let matchingPaletteIndex else {
+            return true
+        }
+
+        return paletteIndex == matchingPaletteIndex
     }
 
     private static func nextEdgeIndex(

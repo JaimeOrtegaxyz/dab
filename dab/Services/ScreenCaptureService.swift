@@ -66,6 +66,22 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         return pixelBuffer.brightnessGrid(in: cropRect, gridSize: gridSize)
     }
 
+    func colorGrid(at mouseLocation: NSPoint, size: CGFloat, gridSize: Int) -> [PixelColor]? {
+        guard let screen = Self.screen(containing: mouseLocation) else {
+            return nil
+        }
+
+        ensureStream(for: screen)
+
+        guard let snapshot = latestFrameSnapshot(),
+              let pixelBuffer = CMSampleBufferGetImageBuffer(snapshot.sampleBuffer) else {
+            return nil
+        }
+
+        let cropRect = cropRect(around: mouseLocation, size: size, in: snapshot)
+        return pixelBuffer.colorGrid(in: cropRect, gridSize: gridSize)
+    }
+
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
         guard outputType == .screen,
               CMSampleBufferIsValid(sampleBuffer),

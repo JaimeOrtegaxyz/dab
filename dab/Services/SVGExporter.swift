@@ -6,23 +6,26 @@ enum SVGExporter {
         let n = grid.size
 
         if grid.isRounded {
-            let boundaryPathData = RoundedGridPath.svgBoundaryPathData(for: grid)
-            let bridgePathData = RoundedGridPath.svgBridgePathData(for: grid)
-
-            if boundaryPathData.isEmpty && bridgePathData.isEmpty {
-                return """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
-                </svg>
-                """
-            }
-
             var pathElements: [String] = []
-            if !boundaryPathData.isEmpty {
-                pathElements.append("<path d=\"\(boundaryPathData)\" fill=\"black\" fill-rule=\"evenodd\"/>")
-            }
-            if !bridgePathData.isEmpty {
-                pathElements.append("<path d=\"\(bridgePathData)\" fill=\"black\"/>")
+
+            for paletteIndex in grid.usedEffectivePaletteIndices() {
+                guard paletteIndex < grid.palette.count else { continue }
+                let fill = grid.palette[paletteIndex].color.hexString
+                let boundaryPathData = RoundedGridPath.svgBoundaryPathData(
+                    for: grid,
+                    matchingPaletteIndex: paletteIndex
+                )
+                let bridgePathData = RoundedGridPath.svgBridgePathData(
+                    for: grid,
+                    matchingPaletteIndex: paletteIndex
+                )
+
+                if !boundaryPathData.isEmpty {
+                    pathElements.append("<path d=\"\(boundaryPathData)\" fill=\"\(fill)\" fill-rule=\"evenodd\"/>")
+                }
+                if !bridgePathData.isEmpty {
+                    pathElements.append("<path d=\"\(bridgePathData)\" fill=\"\(fill)\"/>")
+                }
             }
 
             return """
@@ -37,26 +40,18 @@ enum SVGExporter {
 
         for row in 0..<n {
             for col in 0..<n {
-                if grid.effectiveCell(row: row, col: col) {
-                    rects.append("    <rect x=\"\(col)\" y=\"\(row)\" width=\"1\" height=\"1\"/>")
+                guard let swatch = grid.effectiveSwatch(row: row, col: col) else {
+                    continue
                 }
-            }
-        }
 
-        if rects.isEmpty {
-            return """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)" shape-rendering="crispEdges">
-            </svg>
-            """
+                rects.append("  <rect x=\"\(col)\" y=\"\(row)\" width=\"1\" height=\"1\" fill=\"\(swatch.color.hexString)\"/>")
+            }
         }
 
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)" shape-rendering="crispEdges">
-          <g fill="black">
         \(rects.joined(separator: "\n"))
-          </g>
         </svg>
         """
     }

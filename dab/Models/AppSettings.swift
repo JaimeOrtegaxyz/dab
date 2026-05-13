@@ -20,7 +20,12 @@ final class AppSettings {
     }
 
     var brightnessThreshold: Float {
-        get { UserDefaults.standard.object(forKey: "brightnessThreshold") as? Float ?? 0.5 }
+        get {
+            if let number = UserDefaults.standard.object(forKey: "brightnessThreshold") as? NSNumber {
+                return number.floatValue
+            }
+            return 0.5
+        }
         set { UserDefaults.standard.set(newValue, forKey: "brightnessThreshold") }
     }
 
@@ -30,9 +35,30 @@ final class AppSettings {
                let mode = FilterMode(rawValue: raw) {
                 return mode
             }
-            return .threshold
+            return .colorMatch
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "filterMode") }
+    }
+
+    var palette: [PaletteSwatch] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: "paletteSwatches"),
+                  let decoded = try? JSONDecoder().decode([PaletteSwatch].self, from: data),
+                  !decoded.isEmpty else {
+                return PaletteSwatch.defaultPalette
+            }
+
+            return Array(decoded.prefix(8))
+        }
+        set {
+            let normalized = Array(newValue.prefix(8))
+            guard !normalized.isEmpty,
+                  let data = try? JSONEncoder().encode(normalized) else {
+                return
+            }
+
+            UserDefaults.standard.set(data, forKey: "paletteSwatches")
+        }
     }
 
     var horizontalMirrorMode: HorizontalMirrorMode {

@@ -6,7 +6,8 @@ final class CaptureViewModel: ObservableObject {
     @Published var gridSize: Int = 16
     @Published var viewportSize: CGFloat = 200
     @Published var brightnessThreshold: Float = 0.5
-    @Published var filterMode: FilterMode = .threshold
+    @Published var filterMode: FilterMode = .colorMatch
+    @Published var palette: [PaletteSwatch] = PaletteSwatch.defaultPalette
     @Published var isInverted: Bool = false
     @Published var horizontalMirrorMode: HorizontalMirrorMode = .none
     @Published var verticalMirrorMode: VerticalMirrorMode = .none
@@ -25,6 +26,7 @@ final class CaptureViewModel: ObservableObject {
         viewportSize = settings.viewportSize
         brightnessThreshold = settings.brightnessThreshold
         filterMode = settings.filterMode
+        palette = settings.palette
         horizontalMirrorMode = settings.horizontalMirrorMode
         verticalMirrorMode = settings.verticalMirrorMode
     }
@@ -95,21 +97,19 @@ final class CaptureViewModel: ObservableObject {
             isRounded.toggle()
             syncCurrentGridPresentation()
         case 18:
-            filterMode = .threshold
+            filterMode = .colorMatch
         case 19:
-            filterMode = .otsu
+            filterMode = .threshold
         case 20:
-            filterMode = .adaptive
+            filterMode = .otsu
         case 21:
-            filterMode = .contrastBoost
+            filterMode = .adaptive
         case 23:
-            filterMode = .cleanThreshold
+            filterMode = .contrastBoost
         case 22:
-            filterMode = .edgeDetect
+            filterMode = .cleanThreshold
         case 26:
-            filterMode = .floydSteinberg
-        case 28:
-            filterMode = .bayerDither
+            filterMode = .edgeDetect
         case 3:
             let all = FilterMode.allCases
             let idx = all.firstIndex(of: filterMode) ?? 0
@@ -167,18 +167,25 @@ final class CaptureViewModel: ObservableObject {
             let currentViewportSize = viewportSize
             let currentThreshold = brightnessThreshold
             let currentFilterMode = filterMode
+            let currentPalette = palette
             let currentInverted = isInverted
             let currentHorizontalMirrorMode = horizontalMirrorMode
             let currentVerticalMirrorMode = verticalMirrorMode
             let currentRounded = isRounded
 
-            guard let brightness = captureService.brightnessGrid(
+            guard let colors = captureService.colorGrid(
                 at: currentMouse,
                 size: currentViewportSize,
                 gridSize: currentGridSize
             ) else { return }
-            var newGrid = GridState(size: currentGridSize)
-            newGrid.cells = GridFilters.apply(currentFilterMode, brightness: brightness, gridSize: currentGridSize, threshold: currentThreshold)
+            var newGrid = GridState(size: currentGridSize, palette: currentPalette)
+            newGrid.cells = GridFilters.apply(
+                currentFilterMode,
+                colors: colors,
+                gridSize: currentGridSize,
+                palette: currentPalette,
+                threshold: currentThreshold
+            )
             newGrid.isInverted = currentInverted
             newGrid.horizontalMirrorMode = currentHorizontalMirrorMode
             newGrid.verticalMirrorMode = currentVerticalMirrorMode
@@ -191,6 +198,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     private func syncCurrentGridPresentation() {
+        gridState.palette = palette
         gridState.isInverted = isInverted
         gridState.horizontalMirrorMode = horizontalMirrorMode
         gridState.verticalMirrorMode = verticalMirrorMode

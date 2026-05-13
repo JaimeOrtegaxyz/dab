@@ -1,67 +1,148 @@
 import Foundation
 
 enum GridFilters {
-    static func apply(_ mode: FilterMode, brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
+    static func apply(
+        _ mode: FilterMode,
+        colors: [PixelColor],
+        gridSize: Int,
+        palette: [PaletteSwatch],
+        threshold: Float
+    ) -> [GridCell] {
+        let palette = normalizedPalette(palette)
+
         switch mode {
+        case .colorMatch:
+            return applyColorMatch(colors: colors, palette: palette, threshold: threshold)
         case .threshold:
-            return applyThreshold(brightness: brightness, threshold: threshold)
+            return applyThresholdBands(colors: colors, palette: palette, threshold: threshold)
         case .otsu:
-            return applyOtsu(brightness: brightness)
+            return applyAutoBands(colors: colors, palette: palette)
         case .adaptive:
-            return applyAdaptive(brightness: brightness, gridSize: gridSize)
+            return applyAdaptive(colors: colors, gridSize: gridSize, palette: palette, threshold: threshold)
         case .contrastBoost:
-            return applyContrastBoost(brightness: brightness, threshold: threshold)
+            return applyContrastBoost(colors: colors, palette: palette, threshold: threshold)
         case .cleanThreshold:
-            return applyCleanThreshold(brightness: brightness, gridSize: gridSize, threshold: threshold)
+            return applyClean(colors: colors, gridSize: gridSize, palette: palette, threshold: threshold)
         case .edgeDetect:
-            return applyEdgeDetect(brightness: brightness, gridSize: gridSize, threshold: threshold)
-        case .floydSteinberg:
-            return applyFloydSteinberg(brightness: brightness, gridSize: gridSize, threshold: threshold)
-        case .bayerDither:
-            return applyBayerDither(brightness: brightness, gridSize: gridSize, threshold: threshold)
+            return applyOutline(colors: colors, gridSize: gridSize, palette: palette, threshold: threshold)
         }
+    }
+
+    private static func normalizedPalette(_ palette: [PaletteSwatch]) -> [PaletteSwatch] {
+        let trimmed = Array(palette.prefix(8))
+        return trimmed.isEmpty ? PaletteSwatch.defaultPalette : trimmed
     }
 
     private static func clamped(_ value: Float, min minValue: Float = 0, max maxValue: Float = 1) -> Float {
         Swift.min(maxValue, Swift.max(minValue, value))
     }
 
-    private static func percentile(in sorted: [Float], p: Float) -> Float {
-        guard let last = sorted.indices.last else { return 0.5 }
-        let index = Int(round(Float(last) * clamped(p)))
-        return sorted[index]
+    private static func paletteCell(_ index: Int, palette: [PaletteSwatch]) -> GridCell {
+        guard !palette.isEmpty else { return .transparent }
+        return .palette(min(max(index, 0), palette.count - 1))
     }
 
-    private static func normalizeContrast(brightness: [Float]) -> [Float] {
-        guard !brightness.isEmpty else { return [] }
+    private static func bandIndex(for brightness: Float, paletteCount: Int, threshold: Float) -> Int {
+        guard paletteCount > 1 else { return 0 }
 
-        let sorted = brightness.sorted()
-        let low = percentile(in: sorted, p: 0.10)
-        let high = percentile(in: sorted, p: 0.90)
-        let range = high - low
+        let adjusted = clamped(brightness + (0.5 - threshold))
+        let rawIndex = Int(floor(adjusted * Float(paletteCount)))
+        return min(max(rawIndex, 0), paletteCount - 1)
+    }
 
-        guard range > 0.001 else {
-            return brightness.map { clamped($0) }
+    private static func transparentBandIndex(for color: PixelColor, palette: [PaletteSwatch], threshold: Float) -> Int? {
+        let index = bandIndex(for: color.brightness, paletteCount: palette.count, threshold: threshold)
+        return palette[index].isTransparent ? index : nil
+    }
+
+    private static func nearestColorIndex(for color: PixelColor, palette: [PaletteSwatch]) -> Int? {
+        palette.indices
+            .filter { !palette[$0].isTransparent }
+            .min { lhs, rhs in
+                color.distanceSquared(to: palette[lhs].color) < color.distanceSquared(to: palette[rhs].color)
+            }
+    }
+
+    // MARK: - 1. Color Match
+
+    private static func applyColorMatch(colors: [PixelColor], palette: [PaletteSwatch], threshold: Float) -> [GridCell] {
+        colors.map { color in
+            if let transparentIndex = transparentBandIndex(for: color, palette: palette, threshold: threshold) {
+                return paletteCell(transparentIndex, palette: palette)
+            }
+
+            guard let nearest = nearestColorIndex(for: color, palette: palette) else {
+                return paletteCell(0, palette: palette)
+            }
+
+            return paletteCell(nearest, palette: palette)
+        }
+    }
+
+    // MARK: - 2. Threshold Bands
+
+    private static func applyThresholdBands(colors: [PixelColor], palette: [PaletteSwatch], threshold: Float) -> [GridCell] {
+        colors.map {
+            paletteCell(
+                bandIndex(for: $0.brightness, paletteCount: palette.count, threshold: threshold),
+                palette: palette
+            )
+        }
+    }
+
+    // MARK: - 3. Auto Bands
+
+    private static func applyAutoBands(colors: [PixelColor], palette: [PaletteSwatch]) -> [GridCell] {
+        guard !colors.isEmpty else { return [] }
+        guard palette.count > 1 else {
+            return Array(repeating: paletteCell(0, palette: palette), count: colors.count)
         }
 
-        return brightness.map { clamped(($0 - low) / range) }
+        if palette.count == 2 {
+            let threshold = otsuThreshold(colors.map(\.brightness))
+            return applyThresholdBands(colors: colors, palette: palette, threshold: threshold)
+        }
+
+        let brightnessValues = colors.map(\.brightness)
+        let clusterCount = min(palette.count, max(1, brightnessValues.count))
+        var centers = (0..<clusterCount).map { (Float($0) + 0.5) / Float(clusterCount) }
+        var assignments = Array(repeating: 0, count: brightnessValues.count)
+
+        for _ in 0..<10 {
+            for (index, brightness) in brightnessValues.enumerated() {
+                assignments[index] = centers.indices.min { lhs, rhs in
+                    abs(brightness - centers[lhs]) < abs(brightness - centers[rhs])
+                } ?? 0
+            }
+
+            var sums = Array(repeating: Float(0), count: clusterCount)
+            var counts = Array(repeating: Float(0), count: clusterCount)
+            for (index, assignment) in assignments.enumerated() {
+                sums[assignment] += brightnessValues[index]
+                counts[assignment] += 1
+            }
+
+            for index in centers.indices where counts[index] > 0 {
+                centers[index] = sums[index] / counts[index]
+            }
+        }
+
+        let rankedClusters = centers.indices.sorted { centers[$0] < centers[$1] }
+        var clusterToPaletteIndex = Array(repeating: 0, count: clusterCount)
+        for (rank, cluster) in rankedClusters.enumerated() {
+            clusterToPaletteIndex[cluster] = min(rank, palette.count - 1)
+        }
+
+        return assignments.map { paletteCell(clusterToPaletteIndex[$0], palette: palette) }
     }
 
-    // MARK: - 1. Threshold (existing behavior)
-
-    private static func applyThreshold(brightness: [Float], threshold: Float) -> [Bool] {
-        brightness.map { $0 < threshold }
-    }
-
-    // MARK: - 2. Otsu (auto threshold)
-
-    private static func applyOtsu(brightness: [Float]) -> [Bool] {
-        guard !brightness.isEmpty else { return [] }
+    private static func otsuThreshold(_ brightness: [Float]) -> Float {
+        guard !brightness.isEmpty else { return 0.5 }
 
         let binCount = 256
         var histogram = [Int](repeating: 0, count: binCount)
-        for b in brightness {
-            let bin = min(binCount - 1, max(0, Int(b * Float(binCount - 1))))
+        for value in brightness {
+            let bin = min(binCount - 1, max(0, Int(clamped(value) * Float(binCount - 1))))
             histogram[bin] += 1
         }
 
@@ -71,21 +152,23 @@ enum GridFilters {
             sumAll += Float(i) * Float(histogram[i])
         }
 
-        var sumB: Float = 0
-        var wB = 0
+        var sumBackground: Float = 0
+        var backgroundWeight = 0
         var maxVariance: Float = 0
         var bestThreshold = 0
 
         for i in 0..<binCount {
-            wB += histogram[i]
-            if wB == 0 { continue }
-            let wF = total - wB
-            if wF == 0 { break }
+            backgroundWeight += histogram[i]
+            if backgroundWeight == 0 { continue }
 
-            sumB += Float(i) * Float(histogram[i])
-            let meanB = sumB / Float(wB)
-            let meanF = (sumAll - sumB) / Float(wF)
-            let variance = Float(wB) * Float(wF) * (meanB - meanF) * (meanB - meanF)
+            let foregroundWeight = total - backgroundWeight
+            if foregroundWeight == 0 { break }
+
+            sumBackground += Float(i) * Float(histogram[i])
+            let backgroundMean = sumBackground / Float(backgroundWeight)
+            let foregroundMean = (sumAll - sumBackground) / Float(foregroundWeight)
+            let meanDifference = backgroundMean - foregroundMean
+            let variance = Float(backgroundWeight) * Float(foregroundWeight) * meanDifference * meanDifference
 
             if variance > maxVariance {
                 maxVariance = variance
@@ -93,78 +176,93 @@ enum GridFilters {
             }
         }
 
-        let autoThreshold = Float(bestThreshold) / Float(binCount - 1)
-        return brightness.map { $0 < autoThreshold }
+        return Float(bestThreshold) / Float(binCount - 1)
     }
 
-    // MARK: - 3. Adaptive (Sauvola)
+    // MARK: - 4. Adaptive
 
-    private static func applyAdaptive(brightness: [Float], gridSize: Int) -> [Bool] {
+    private static func applyAdaptive(
+        colors: [PixelColor],
+        gridSize: Int,
+        palette: [PaletteSwatch],
+        threshold: Float
+    ) -> [GridCell] {
         let count = gridSize * gridSize
-        guard gridSize > 0, brightness.count >= count else {
-            return brightness.map { $0 < 0.5 }
+        guard gridSize > 0, colors.count >= count else {
+            return applyThresholdBands(colors: colors, palette: palette, threshold: threshold)
         }
 
-        var result = [Bool](repeating: false, count: count)
+        let brightness = Array(colors.prefix(count)).map(\.brightness)
+        var result = [GridCell](repeating: .transparent, count: count)
         let radius = max(1, min(3, gridSize / 6))
-        let k: Float = 0.2
-        let maxStdDev: Float = 0.5
 
         for row in 0..<gridSize {
             for col in 0..<gridSize {
                 var sum: Float = 0
-                var sumSq: Float = 0
-                var n: Float = 0
+                var samples: Float = 0
 
                 for dr in -radius...radius {
                     for dc in -radius...radius {
                         let r = row + dr
                         let c = col + dc
                         if r >= 0, r < gridSize, c >= 0, c < gridSize {
-                            let val = brightness[r * gridSize + c]
-                            sum += val
-                            sumSq += val * val
-                            n += 1
+                            sum += brightness[r * gridSize + c]
+                            samples += 1
                         }
                     }
                 }
 
-                let mean = sum / n
-                let variance = (sumSq / n) - (mean * mean)
-                let stddev = sqrt(max(0, variance))
-                let localThreshold = mean * (1.0 + k * (stddev / maxStdDev - 1.0))
-
-                result[row * gridSize + col] = brightness[row * gridSize + col] < localThreshold
+                let localMean = samples > 0 ? sum / samples : 0.5
+                let localBrightness = clamped(0.5 + ((brightness[row * gridSize + col] - localMean) * 1.4))
+                let index = bandIndex(for: localBrightness, paletteCount: palette.count, threshold: threshold)
+                result[row * gridSize + col] = paletteCell(index, palette: palette)
             }
         }
 
         return result
     }
 
-    // MARK: - 4. Auto Contrast
+    // MARK: - 5. Contrast
 
-    private static func applyContrastBoost(brightness: [Float], threshold: Float) -> [Bool] {
-        applyThreshold(brightness: normalizeContrast(brightness: brightness), threshold: threshold)
+    private static func applyContrastBoost(colors: [PixelColor], palette: [PaletteSwatch], threshold: Float) -> [GridCell] {
+        guard !colors.isEmpty else { return [] }
+
+        let sortedBrightness = colors.map(\.brightness).sorted()
+        let low = percentile(in: sortedBrightness, p: 0.10)
+        let high = percentile(in: sortedBrightness, p: 0.90)
+        let normalized = colors.map { $0.contrastNormalized(low: low, high: high) }
+        return applyColorMatch(colors: normalized, palette: palette, threshold: threshold)
     }
 
-    // MARK: - 5. Cleanup Threshold
+    private static func percentile(in sorted: [Float], p: Float) -> Float {
+        guard let last = sorted.indices.last else { return 0.5 }
+        let index = Int(round(Float(last) * clamped(p)))
+        return sorted[index]
+    }
 
-    private static func applyCleanThreshold(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
+    // MARK: - 6. Clean
+
+    private static func applyClean(
+        colors: [PixelColor],
+        gridSize: Int,
+        palette: [PaletteSwatch],
+        threshold: Float
+    ) -> [GridCell] {
         let count = gridSize * gridSize
-        guard gridSize > 0, brightness.count >= count else {
-            return brightness.map { $0 < threshold }
+        guard gridSize > 0, colors.count >= count else {
+            return applyColorMatch(colors: colors, palette: palette, threshold: threshold)
         }
 
-        let base = applyThreshold(
-            brightness: normalizeContrast(brightness: Array(brightness.prefix(count))),
+        let base = applyColorMatch(
+            colors: Array(colors.prefix(count)),
+            palette: palette,
             threshold: threshold
         )
-
         let passes = gridSize <= 10 ? 2 : 1
         return applyMajorityCleanup(cells: base, gridSize: gridSize, passes: passes)
     }
 
-    private static func applyMajorityCleanup(cells: [Bool], gridSize: Int, passes: Int) -> [Bool] {
+    private static func applyMajorityCleanup(cells: [GridCell], gridSize: Int, passes: Int) -> [GridCell] {
         var current = cells
 
         for _ in 0..<passes {
@@ -172,29 +270,19 @@ enum GridFilters {
 
             for row in 0..<gridSize {
                 for col in 0..<gridSize {
-                    var blackCount = 0
-                    var totalCount = 0
+                    var counts: [GridCell: Int] = [:]
 
                     for dr in -1...1 {
                         for dc in -1...1 {
                             let r = row + dr
                             let c = col + dc
                             guard r >= 0, r < gridSize, c >= 0, c < gridSize else { continue }
-                            totalCount += 1
-                            if current[r * gridSize + c] {
-                                blackCount += 1
-                            }
+                            counts[current[r * gridSize + c], default: 0] += 1
                         }
                     }
 
-                    let whiteCount = totalCount - blackCount
-                    let index = row * gridSize + col
-                    if blackCount > whiteCount {
-                        next[index] = true
-                    } else if whiteCount > blackCount {
-                        next[index] = false
-                    } else {
-                        next[index] = current[index]
+                    if let winner = counts.max(by: { $0.value < $1.value })?.key {
+                        next[row * gridSize + col] = winner
                     }
                 }
             }
@@ -205,13 +293,20 @@ enum GridFilters {
         return current
     }
 
-    // MARK: - 6. Edge Detect (Sobel)
+    // MARK: - 7. Outline
 
-    private static func applyEdgeDetect(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
+    private static func applyOutline(
+        colors: [PixelColor],
+        gridSize: Int,
+        palette: [PaletteSwatch],
+        threshold: Float
+    ) -> [GridCell] {
         let count = gridSize * gridSize
-        guard gridSize > 0, brightness.count >= count else {
-            return [Bool](repeating: false, count: max(brightness.count, 0))
+        guard gridSize > 0, colors.count >= count else {
+            return Array(repeating: .transparent, count: max(colors.count, 0))
         }
+
+        let brightness = Array(colors.prefix(count)).map(\.brightness)
 
         func pixel(_ r: Int, _ c: Int) -> Float {
             let r = min(max(r, 0), gridSize - 1)
@@ -237,85 +332,27 @@ enum GridFilters {
             }
         }
 
-        guard maxEdge > 0 else { return [Bool](repeating: false, count: count) }
-        return edges.map { ($0 / maxEdge) > (1.0 - threshold) }
-    }
-
-    // MARK: - 7. Floyd-Steinberg Dithering
-
-    private static func applyFloydSteinberg(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
-        let count = gridSize * gridSize
-        guard gridSize > 0, brightness.count >= count else {
-            return brightness.map { $0 < threshold }
-        }
-
-        var buffer = Array(brightness.prefix(count))
-        var result = [Bool](repeating: false, count: count)
-
-        func addError(row: Int, col: Int, error: Float, weight: Float) {
-            guard row >= 0, row < gridSize, col >= 0, col < gridSize else { return }
-            let index = row * gridSize + col
-            buffer[index] = clamped(buffer[index] + error * weight)
-        }
-
-        for row in 0..<gridSize {
-            if row.isMultiple(of: 2) {
-                for col in 0..<gridSize {
-                    let idx = row * gridSize + col
-                    let oldVal = buffer[idx]
-                    let newVal: Float = oldVal < threshold ? 0.0 : 1.0
-                    result[idx] = newVal == 0.0
-                    let error = oldVal - newVal
-
-                    addError(row: row, col: col + 1, error: error, weight: 7.0 / 16.0)
-                    addError(row: row + 1, col: col - 1, error: error, weight: 3.0 / 16.0)
-                    addError(row: row + 1, col: col, error: error, weight: 5.0 / 16.0)
-                    addError(row: row + 1, col: col + 1, error: error, weight: 1.0 / 16.0)
-                }
-            } else {
-                for col in stride(from: gridSize - 1, through: 0, by: -1) {
-                    let idx = row * gridSize + col
-                    let oldVal = buffer[idx]
-                    let newVal: Float = oldVal < threshold ? 0.0 : 1.0
-                    result[idx] = newVal == 0.0
-                    let error = oldVal - newVal
-
-                    addError(row: row, col: col - 1, error: error, weight: 7.0 / 16.0)
-                    addError(row: row + 1, col: col + 1, error: error, weight: 3.0 / 16.0)
-                    addError(row: row + 1, col: col, error: error, weight: 5.0 / 16.0)
-                    addError(row: row + 1, col: col - 1, error: error, weight: 1.0 / 16.0)
-                }
+        let backgroundIndex = palette.indices.first { palette[$0].isTransparent }
+            ?? palette.indices.filter { !palette[$0].isTransparent }.max {
+                palette[$0].color.brightness < palette[$1].color.brightness
             }
+            ?? 0
+
+        guard maxEdge > 0 else {
+            return Array(repeating: paletteCell(backgroundIndex, palette: palette), count: count)
         }
 
-        return result
-    }
-
-    // MARK: - 8. Bayer Ordered Dithering (4x4)
-
-    private static let bayerMatrix: [Float] = [
-         0.0 / 16,  8.0 / 16,  2.0 / 16, 10.0 / 16,
-        12.0 / 16,  4.0 / 16, 14.0 / 16,  6.0 / 16,
-         3.0 / 16, 11.0 / 16,  1.0 / 16,  9.0 / 16,
-        15.0 / 16,  7.0 / 16, 13.0 / 16,  5.0 / 16,
-    ]
-
-    private static func applyBayerDither(brightness: [Float], gridSize: Int, threshold: Float) -> [Bool] {
-        let count = gridSize * gridSize
-        guard gridSize > 0, brightness.count >= count else {
-            return brightness.map { $0 < threshold }
-        }
-
-        var result = [Bool](repeating: false, count: count)
-        for row in 0..<gridSize {
-            for col in 0..<gridSize {
-                let idx = row * gridSize + col
-                let patternThreshold = bayerMatrix[(row % 4) * 4 + (col % 4)] - 0.5
-                let adjustedThreshold = clamped(threshold + patternThreshold)
-                result[idx] = brightness[idx] < adjustedThreshold
+        let edgeThreshold = 1.0 - threshold
+        return edges.enumerated().map { index, edge in
+            guard (edge / maxEdge) > edgeThreshold else {
+                return paletteCell(backgroundIndex, palette: palette)
             }
-        }
 
-        return result
+            guard let nearest = nearestColorIndex(for: colors[index], palette: palette) else {
+                return paletteCell(0, palette: palette)
+            }
+
+            return paletteCell(nearest, palette: palette)
+        }
     }
 }

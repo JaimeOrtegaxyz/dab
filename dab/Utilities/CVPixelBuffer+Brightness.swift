@@ -2,6 +2,85 @@ import CoreGraphics
 import CoreVideo
 
 extension CVPixelBuffer {
+    /// Computes an NxN grid of average sRGB colors from a region of a BGRA pixel buffer.
+    func colorGrid(in region: CGRect, gridSize: Int) -> [PixelColor] {
+        guard gridSize > 0 else {
+            return []
+        }
+
+        let bufferWidth = CVPixelBufferGetWidth(self)
+        let bufferHeight = CVPixelBufferGetHeight(self)
+        let pixelFormat = CVPixelBufferGetPixelFormatType(self)
+
+        guard bufferWidth > 0, bufferHeight > 0, pixelFormat == kCVPixelFormatType_32BGRA else {
+            return Array(repeating: PixelColor(red: 0.5, green: 0.5, blue: 0.5), count: gridSize * gridSize)
+        }
+
+        let boundedRegion = region.integral.intersection(
+            CGRect(x: 0, y: 0, width: bufferWidth, height: bufferHeight)
+        )
+        guard !boundedRegion.isNull, boundedRegion.width > 0, boundedRegion.height > 0 else {
+            return Array(repeating: PixelColor(red: 0.5, green: 0.5, blue: 0.5), count: gridSize * gridSize)
+        }
+
+        let minX = Int(boundedRegion.minX)
+        let minY = Int(boundedRegion.minY)
+        let regionWidth = max(Int(boundedRegion.width), 1)
+        let regionHeight = max(Int(boundedRegion.height), 1)
+
+        CVPixelBufferLockBaseAddress(self, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(self, .readOnly) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(self) else {
+            return Array(repeating: PixelColor(red: 0.5, green: 0.5, blue: 0.5), count: gridSize * gridSize)
+        }
+
+        let bytes = baseAddress.assumingMemoryBound(to: UInt8.self)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(self)
+        let cellWidth = Float(regionWidth) / Float(gridSize)
+        let cellHeight = Float(regionHeight) / Float(gridSize)
+
+        var result = [PixelColor](repeating: PixelColor(red: 0, green: 0, blue: 0), count: gridSize * gridSize)
+
+        for row in 0..<gridSize {
+            for col in 0..<gridSize {
+                let startX = minX + Int(Float(col) * cellWidth)
+                let startY = minY + Int(Float(row) * cellHeight)
+                let endX = min(minX + Int(Float(col + 1) * cellWidth), minX + regionWidth)
+                let endY = min(minY + Int(Float(row + 1) * cellHeight), minY + regionHeight)
+
+                var redSum: Float = 0
+                var greenSum: Float = 0
+                var blueSum: Float = 0
+                var count: Int = 0
+
+                for y in startY..<endY {
+                    let rowOffset = y * bytesPerRow
+                    for x in startX..<endX {
+                        let pixelOffset = rowOffset + (x * 4)
+                        blueSum += Float(bytes[pixelOffset])
+                        greenSum += Float(bytes[pixelOffset + 1])
+                        redSum += Float(bytes[pixelOffset + 2])
+                        count += 1
+                    }
+                }
+
+                if count > 0 {
+                    let divisor = Float(count) * 255.0
+                    result[row * gridSize + col] = PixelColor(
+                        red: redSum / divisor,
+                        green: greenSum / divisor,
+                        blue: blueSum / divisor
+                    )
+                } else {
+                    result[row * gridSize + col] = PixelColor(red: 0.5, green: 0.5, blue: 0.5)
+                }
+            }
+        }
+
+        return result
+    }
+
     /// Computes an NxN grid of average brightness values from a region of a BGRA pixel buffer.
     /// Returns a flat array of size gridSize*gridSize with values 0.0 (black) to 1.0 (white).
     func brightnessGrid(in region: CGRect, gridSize: Int) -> [Float] {

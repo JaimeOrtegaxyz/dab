@@ -1,5 +1,15 @@
 import SwiftUI
 
+private extension Color {
+    init(pixelColor: PixelColor) {
+        self.init(
+            red: Double(pixelColor.red),
+            green: Double(pixelColor.green),
+            blue: Double(pixelColor.blue)
+        )
+    }
+}
+
 struct OverlayContentView: View {
     static let infoBarHeight: CGFloat = 20
 
@@ -17,33 +27,38 @@ struct OverlayContentView: View {
                 let actualSize = gridState.size
                 guard actualSize > 0 else { return }
 
-                // Fill white background
-                context.fill(
-                    Path(CGRect(origin: .zero, size: size)),
-                    with: .color(.white)
-                )
+                drawTransparencyBackground(in: context, size: size)
 
                 if gridState.isRounded {
-                    let roundedPath = RoundedGridPath.cgPath(
-                        for: gridState,
-                        in: CGRect(origin: .zero, size: size)
-                    )
-                    context.fill(Path(roundedPath), with: .color(.black))
+                    for paletteIndex in gridState.usedEffectivePaletteIndices() {
+                        guard paletteIndex < gridState.palette.count else { continue }
+                        let roundedPath = RoundedGridPath.cgPath(
+                            for: gridState,
+                            in: CGRect(origin: .zero, size: size),
+                            matchingPaletteIndex: paletteIndex
+                        )
+                        context.fill(
+                            Path(roundedPath),
+                            with: .color(Color(pixelColor: gridState.palette[paletteIndex].color))
+                        )
+                    }
                 } else {
                     let cellW = size.width / CGFloat(actualSize)
                     let cellH = size.height / CGFloat(actualSize)
 
                     for row in 0..<actualSize {
                         for col in 0..<actualSize {
-                            if gridState.effectiveCell(row: row, col: col) {
-                                let rect = CGRect(
-                                    x: CGFloat(col) * cellW,
-                                    y: CGFloat(row) * cellH,
-                                    width: cellW,
-                                    height: cellH
-                                )
-                                context.fill(Path(rect), with: .color(.black))
+                            guard let swatch = gridState.effectiveSwatch(row: row, col: col) else {
+                                continue
                             }
+
+                            let rect = CGRect(
+                                x: CGFloat(col) * cellW,
+                                y: CGFloat(row) * cellH,
+                                width: cellW,
+                                height: cellH
+                            )
+                            context.fill(Path(rect), with: .color(Color(pixelColor: swatch.color)))
                         }
                     }
                 }
@@ -76,6 +91,27 @@ struct OverlayContentView: View {
             .padding(.horizontal, 6)
             .frame(width: viewportSize, height: Self.infoBarHeight)
             .background(Color.black)
+        }
+    }
+
+    private func drawTransparencyBackground(in context: GraphicsContext, size: CGSize) {
+        let baseRect = CGRect(origin: .zero, size: size)
+        context.fill(Path(baseRect), with: .color(.white))
+
+        let checkerSize: CGFloat = 8
+        let columns = Int(ceil(size.width / checkerSize))
+        let rows = Int(ceil(size.height / checkerSize))
+
+        for row in 0..<rows {
+            for col in 0..<columns where (row + col).isMultiple(of: 2) {
+                let rect = CGRect(
+                    x: CGFloat(col) * checkerSize,
+                    y: CGFloat(row) * checkerSize,
+                    width: checkerSize,
+                    height: checkerSize
+                )
+                context.fill(Path(rect), with: .color(Color.gray.opacity(0.14)))
+            }
         }
     }
 }

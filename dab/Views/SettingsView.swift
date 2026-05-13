@@ -24,6 +24,30 @@ private enum WatchMetrics {
     static let titleBarHeight: CGFloat = 28
 }
 
+private extension Color {
+    init(pixelColor: PixelColor) {
+        self.init(
+            red: Double(pixelColor.red),
+            green: Double(pixelColor.green),
+            blue: Double(pixelColor.blue)
+        )
+    }
+}
+
+private extension PixelColor {
+    init?(color: Color) {
+        guard let rgb = NSColor(color).usingColorSpace(.sRGB) else {
+            return nil
+        }
+
+        self.init(
+            red: Float(rgb.redComponent),
+            green: Float(rgb.greenComponent),
+            blue: Float(rgb.blueComponent)
+        )
+    }
+}
+
 // MARK: - Bundled image renderer (SVG / PNG)
 
 private struct BundleImage: View {
@@ -163,7 +187,7 @@ struct SettingsView: View {
     @AppStorage("viewportSize") private var viewportSize: Double = 200.0
     @AppStorage("resizeStep") private var resizeStep: Double = 10.0
     @AppStorage("brightnessThreshold") private var brightnessThreshold: Double = 0.5
-    @AppStorage("filterMode") private var filterModeRaw: String = FilterMode.threshold.rawValue
+    @AppStorage("filterMode") private var filterModeRaw: String = FilterMode.colorMatch.rawValue
     @AppStorage("horizontalMirrorMode") private var horizontalMirrorModeRaw: String = AppSettings.shared.horizontalMirrorMode.rawValue
     @AppStorage("verticalMirrorMode") private var verticalMirrorModeRaw: String = AppSettings.shared.verticalMirrorMode.rawValue
     @AppStorage("filenameFormat") private var filenameFormat: String = "dab_{date}_{time}"
@@ -173,6 +197,7 @@ struct SettingsView: View {
     @State private var hotkeyModifiers: UInt32 = AppSettings.shared.hotkeyModifiers
     @State private var hotkeyDisplayString: String = AppSettings.shared.hotkeyDisplayString
     @State private var filenamePreview: String = ""
+    @State private var palette: [PaletteSwatch] = PaletteSwatch.defaultPalette
     @State private var keyMonitor: Any?
     @FocusState private var isFilenameFieldFocused: Bool
 
@@ -207,9 +232,16 @@ struct SettingsView: View {
             hotkeyKeyCode = AppSettings.shared.hotkeyKeyCode
             hotkeyModifiers = AppSettings.shared.hotkeyModifiers
             hotkeyDisplayString = AppSettings.shared.hotkeyDisplayString
+            if FilterMode(rawValue: filterModeRaw) == nil {
+                filterModeRaw = FilterMode.colorMatch.rawValue
+            }
+            palette = AppSettings.shared.palette
             updateFilenamePreview()
         }
         .onChange(of: filenameFormat) { _, _ in
+            updateFilenamePreview()
+        }
+        .onChange(of: gridSize) { _, _ in
             updateFilenamePreview()
         }
         .onDisappear {
@@ -314,6 +346,53 @@ struct SettingsView: View {
             }
         }
 
+        sectionShell("palette") {
+            HStack(spacing: 8) {
+                Button("default") {
+                    setPalette(PaletteSwatch.defaultPalette)
+                }
+                .buttonStyle(WatchButtonStyle())
+
+                Button("black / transparent") {
+                    setPalette(PaletteSwatch.blackTransparentPalette)
+                }
+                .buttonStyle(WatchButtonStyle())
+
+                Spacer()
+            }
+
+            SilkscreenRule()
+
+            ForEach(palette.indices, id: \.self) { index in
+                paletteRow(index)
+                if index < palette.count - 1 {
+                    SilkscreenRule()
+                }
+            }
+
+            if palette.count < 8 {
+                SilkscreenRule()
+                HStack(spacing: 8) {
+                    Button("add color") {
+                        addPaletteColor()
+                    }
+                    .buttonStyle(WatchButtonStyle())
+
+                    if !palette.contains(where: \.isTransparent) {
+                        Button("add transparent") {
+                            addTransparentSwatch()
+                        }
+                        .buttonStyle(WatchButtonStyle())
+                    }
+
+                    Spacer()
+                    LCDChip(width: 48) {
+                        Text("\(palette.count)/8")
+                    }
+                }
+            }
+        }
+
         sectionShell("mirror output") {
             settingsRow("horizontal") {
                 lcdPicker(
@@ -405,7 +484,7 @@ struct SettingsView: View {
             SilkscreenRule()
             shortcutRow("v", "cycle vertical mirror")
             SilkscreenRule()
-            shortcutRow("1-8", "select filter mode")
+            shortcutRow("1-7", "select filter mode")
             SilkscreenRule()
             shortcutRow("f", "cycle filter mode")
             SilkscreenRule()
@@ -497,6 +576,105 @@ struct SettingsView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+    }
+
+    @ViewBuilder
+    private func paletteRow(_ index: Int) -> some View {
+        if palette.indices.contains(index) {
+            HStack(spacing: 8) {
+                Text("swatch \(index + 1)")
+                    .font(WatchFont.body(11, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(WatchTheme.caseInk)
+
+                Spacer()
+
+                if palette[index].isTransparent {
+                    LCDChip(width: 108) {
+                        Text("transparent")
+                    }
+
+                    Button("make color") {
+                        palette[index].isTransparent = false
+                        savePalette()
+                    }
+                    .buttonStyle(WatchButtonStyle())
+                } else {
+                    ColorPicker(
+                        "",
+                        selection: paletteColorBinding(for: index),
+                        supportsOpacity: false
+                    )
+                    .labelsHidden()
+                    .frame(width: 30)
+
+                    LCDChip(width: 84) {
+                        Text(palette[index].color.hexString.lowercased())
+                    }
+
+                    Button("transparent") {
+                        palette[index].isTransparent = true
+                        savePalette()
+                    }
+                    .buttonStyle(WatchButtonStyle())
+                }
+
+                if palette.count > 1 {
+                    Button("remove") {
+                        removePaletteSwatch(at: index)
+                    }
+                    .buttonStyle(WatchButtonStyle())
+                }
+            }
+        }
+    }
+
+    private func paletteColorBinding(for index: Int) -> Binding<Color> {
+        Binding {
+            guard palette.indices.contains(index) else {
+                return Color.black
+            }
+
+            return Color(pixelColor: palette[index].color)
+        } set: { newColor in
+            guard palette.indices.contains(index), let pixelColor = PixelColor(color: newColor) else {
+                return
+            }
+
+            palette[index].color = pixelColor
+            palette[index].isTransparent = false
+            savePalette()
+        }
+    }
+
+    private func setPalette(_ swatches: [PaletteSwatch]) {
+        palette = Array(swatches.prefix(8))
+        if palette.isEmpty {
+            palette = PaletteSwatch.defaultPalette
+        }
+        savePalette()
+    }
+
+    private func addPaletteColor() {
+        guard palette.count < 8 else { return }
+        palette.append(PaletteSwatch(color: PixelColor(hex: "#FFFFFF")!))
+        savePalette()
+    }
+
+    private func addTransparentSwatch() {
+        guard palette.count < 8 else { return }
+        palette.append(PaletteSwatch(color: PixelColor(hex: "#000000")!, isTransparent: true))
+        savePalette()
+    }
+
+    private func removePaletteSwatch(at index: Int) {
+        guard palette.count > 1, palette.indices.contains(index) else { return }
+        palette.remove(at: index)
+        savePalette()
+    }
+
+    private func savePalette() {
+        AppSettings.shared.palette = palette
     }
 
     // MARK: - Hotkey Recording

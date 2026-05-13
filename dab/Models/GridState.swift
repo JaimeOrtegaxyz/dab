@@ -1,20 +1,27 @@
 import Foundation
 
+enum GridCell: Hashable {
+    case palette(Int)
+    case transparent
+}
+
 struct GridState {
     let size: Int
-    var cells: [Bool]  // true = black cell
+    var palette: [PaletteSwatch]
+    var cells: [GridCell]
     var isInverted: Bool = false
     var horizontalMirrorMode: HorizontalMirrorMode = .none
     var verticalMirrorMode: VerticalMirrorMode = .none
     var isRounded: Bool = false
 
-    init(size: Int) {
+    init(size: Int, palette: [PaletteSwatch] = PaletteSwatch.defaultPalette) {
         self.size = size
-        self.cells = Array(repeating: false, count: size * size)
+        self.palette = Array(palette.prefix(8))
+        self.cells = Array(repeating: .transparent, count: size * size)
     }
 
-    func effectiveCell(row: Int, col: Int) -> Bool {
-        guard row >= 0, row < size, col >= 0, col < size else { return false }
+    func effectiveCell(row: Int, col: Int) -> GridCell {
+        guard row >= 0, row < size, col >= 0, col < size else { return .transparent }
 
         let r: Int
         switch verticalMirrorMode {
@@ -37,16 +44,54 @@ struct GridState {
         }
 
         let index = r * size + c
-        guard index >= 0, index < cells.count else { return false }
-        let value = cells[index]
-        return isInverted ? !value : value
+        guard index >= 0, index < cells.count else { return .transparent }
+        return inverted(cells[index])
     }
 
-    static func from(brightness: [Float], gridSize: Int, threshold: Float) -> GridState {
-        var state = GridState(size: gridSize)
-        for i in 0..<min(brightness.count, gridSize * gridSize) {
-            state.cells[i] = brightness[i] < threshold
+    func effectivePaletteIndex(row: Int, col: Int) -> Int? {
+        guard !palette.isEmpty else { return nil }
+
+        switch effectiveCell(row: row, col: col) {
+        case .transparent:
+            return nil
+        case .palette(let index):
+            let clampedIndex = min(max(index, 0), palette.count - 1)
+            guard !palette[clampedIndex].isTransparent else { return nil }
+            return clampedIndex
         }
-        return state
+    }
+
+    func effectiveSwatch(row: Int, col: Int) -> PaletteSwatch? {
+        guard let index = effectivePaletteIndex(row: row, col: col) else {
+            return nil
+        }
+
+        return palette[index]
+    }
+
+    func usedEffectivePaletteIndices() -> [Int] {
+        var indices = Set<Int>()
+        for row in 0..<size {
+            for col in 0..<size {
+                if let index = effectivePaletteIndex(row: row, col: col) {
+                    indices.insert(index)
+                }
+            }
+        }
+        return indices.sorted()
+    }
+
+    private func inverted(_ cell: GridCell) -> GridCell {
+        guard isInverted, !palette.isEmpty else {
+            return cell
+        }
+
+        switch cell {
+        case .transparent:
+            return .transparent
+        case .palette(let index):
+            let clampedIndex = min(max(index, 0), palette.count - 1)
+            return .palette(palette.count - 1 - clampedIndex)
+        }
     }
 }
