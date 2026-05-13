@@ -2,74 +2,35 @@
 set -euo pipefail
 
 APP_NAME="dab"
-BUILD_ROOT=".build"
-BUILD_DIR="${BUILD_ROOT}/release"
 APP_BUNDLE="${APP_NAME}.app"
 CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
+FRAMEWORKS="${CONTENTS}/Frameworks"
 SOURCE_RESOURCES="dab/Resources"
-SWIFT_MODULE_CACHE="${BUILD_ROOT}/swift-module-cache"
-CLANG_MODULE_CACHE="${BUILD_ROOT}/clang-module-cache"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-B6263C6F33FB6C841AB4CE6026F1B2B24768B222}"
 ENTITLEMENTS="dab.entitlements"
 
-resolve_sdk() {
-    local candidates=()
-    local default_sdk
+echo "Building ${APP_NAME} via SwiftPM..."
+swift build -c release
 
-    default_sdk="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
-    if [[ -n "${default_sdk}" ]]; then
-        candidates+=("${default_sdk}")
-    fi
+BINARY_PATH=".build/release/${APP_NAME}"
+SPARKLE_FRAMEWORK=".build/release/Sparkle.framework"
 
-    candidates+=(
-        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-    )
-
-    for sdk in "${candidates[@]}"; do
-        if [[ -d "${sdk}" ]]; then
-            printf '%s\n' "${sdk}"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-SDKROOT="$(resolve_sdk)" || {
-    echo "Unable to locate a macOS SDK."
-    exit 1
-}
-TARGET="arm64-apple-macos14.0"
-
-mkdir -p "${BUILD_DIR}" "${SWIFT_MODULE_CACHE}" "${CLANG_MODULE_CACHE}"
-
-SWIFT_SOURCES=()
-while IFS= read -r source; do
-    SWIFT_SOURCES+=("${source}")
-done < <(find "dab" -name '*.swift' -not -path "*/Resources/*" | sort)
-
-if [[ "${#SWIFT_SOURCES[@]}" -eq 0 ]]; then
-    echo "No Swift source files found."
+if [[ ! -f "${BINARY_PATH}" ]]; then
+    echo "Build did not produce expected binary at ${BINARY_PATH}"
     exit 1
 fi
 
-echo "Building ${APP_NAME}..."
-swiftc \
-    -O \
-    -sdk "${SDKROOT}" \
-    -target "${TARGET}" \
-    -module-cache-path "${SWIFT_MODULE_CACHE}" \
-    -Xcc "-fmodules-cache-path=${CLANG_MODULE_CACHE}" \
-    "${SWIFT_SOURCES[@]}" \
-    -o "${BUILD_DIR}/${APP_NAME}"
-
-BINARY_PATH="${BUILD_DIR}/${APP_NAME}"
+if [[ ! -d "${SPARKLE_FRAMEWORK}" ]]; then
+    echo "Sparkle.framework not found at ${SPARKLE_FRAMEWORK}"
+    echo "Run 'swift package resolve' to fetch the Sparkle binary artifact."
+    exit 1
+fi
 
 echo "Creating app bundle..."
 rm -rf "${APP_BUNDLE}"
-mkdir -p "${MACOS}" "${RESOURCES}"
+mkdir -p "${MACOS}" "${RESOURCES}" "${FRAMEWORKS}"
 
 cp "${BINARY_PATH}" "${MACOS}/${APP_NAME}"
 cp "dab/App/Info.plist" "${CONTENTS}/Info.plist"
@@ -81,7 +42,24 @@ if [[ -d "${SOURCE_RESOURCES}" ]]; then
         -exec cp {} "${RESOURCES}/" \;
 fi
 
+# Embed Sparkle.framework. ditto preserves the framework's Versions/Current
+# symlinks intact — cp -R would too, but ditto is the safer default for
+# bundles. Sparkle's nested XPC services come along inside.
+echo "Embedding Sparkle.framework..."
+ditto "${SPARKLE_FRAMEWORK}" "${FRAMEWORKS}/Sparkle.framework"
+
+# Swift's linker only sets rpath to @loader_path (the binary's own directory).
+# Sparkle.framework lives in Contents/Frameworks/, so dyld needs an explicit
+# rpath relative to the executable. Without this, launch fails with:
+#   "Library not loaded: @rpath/Sparkle.framework/Versions/B/Sparkle".
+echo "Patching rpath for Frameworks/..."
+install_name_tool -add_rpath "@executable_path/../Frameworks" "${MACOS}/${APP_NAME}"
+
+# Sign the inner framework first (with --deep so its nested bundles —
+# Updater.app, Autoupdate.app, XPCServices — all get signed too), then
+# sign the outer app. Signing has to walk inner-out.
 echo "Codesigning with identity: ${SIGNING_IDENTITY}"
+codesign --force --deep --sign "${SIGNING_IDENTITY}" "${FRAMEWORKS}/Sparkle.framework"
 codesign --force --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" "${APP_BUNDLE}"
 
 echo "Done! Created ${APP_BUNDLE}"
