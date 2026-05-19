@@ -100,6 +100,8 @@ final class CaptureViewModel: ObservableObject {
             filterMode = .colorMatch
         case 19:
             filterMode = .threshold
+        case 20:
+            filterMode = .halftone
         case 26:
             filterMode = .edgeDetect
         case 3:

@@ -21,6 +21,8 @@ enum GridFilters {
             )
         case .threshold:
             return applyThresholdBands(colors: colors, palette: palette, threshold: threshold)
+        case .halftone:
+            return applyHalftone(colors: colors, gridSize: gridSize, palette: palette, threshold: threshold)
         case .edgeDetect:
             return applyOutline(colors: colors, gridSize: gridSize, palette: palette, threshold: threshold)
         }
@@ -117,7 +119,67 @@ enum GridFilters {
         }
     }
 
-    // MARK: - 3. Outline
+    // MARK: - 3. Halftone
+
+    /// 8x8 Bayer matrix. Values 0-63 normalize against 64 to give the
+    /// per-cell threshold for "round up vs round down" when a brightness
+    /// value sits between two palette bands. Pixels near a band center
+    /// keep their nearest band; pixels near a band boundary get nudged to
+    /// either side based on their grid position, producing a regular
+    /// stipple pattern at the transitions.
+    private static let bayer8x8: [[Int]] = [
+        [ 0, 32,  8, 40,  2, 34, 10, 42],
+        [48, 16, 56, 24, 50, 18, 58, 26],
+        [12, 44,  4, 36, 14, 46,  6, 38],
+        [60, 28, 52, 20, 62, 30, 54, 22],
+        [ 3, 35, 11, 43,  1, 33,  9, 41],
+        [51, 19, 59, 27, 49, 17, 57, 25],
+        [15, 47,  7, 39, 13, 45,  5, 37],
+        [63, 31, 55, 23, 61, 29, 53, 21],
+    ]
+
+    private static func applyHalftone(
+        colors: [PixelColor],
+        gridSize: Int,
+        palette: [PaletteSwatch],
+        threshold: Float
+    ) -> [GridCell] {
+        let count = gridSize * gridSize
+        guard gridSize > 0, colors.count >= count, !palette.isEmpty else {
+            return Array(repeating: .transparent, count: max(colors.count, 0))
+        }
+
+        // Same brightness-sort fix as Threshold so the slider biases the
+        // image toward darker/brighter swatches regardless of palette order.
+        let bandToPalette = palette.indices.sorted {
+            palette[$0].color.brightness < palette[$1].color.brightness
+        }
+        let paletteCount = palette.count
+
+        var result = [GridCell](repeating: .transparent, count: count)
+
+        for row in 0..<gridSize {
+            for col in 0..<gridSize {
+                let cellIndex = row * gridSize + col
+                let brightness = colors[cellIndex].brightness
+                let adjusted = clamped(brightness + (0.5 - threshold))
+                let rawBandPosition = adjusted * Float(paletteCount)
+                let floorBand = Int(floor(rawBandPosition))
+                let fractional = rawBandPosition - Float(floorBand)
+
+                // Bayer threshold in [0, 1). If the fractional component
+                // exceeds the threshold for this grid position, round up.
+                let bayerValue = Float(bayer8x8[row & 7][col & 7]) / 64.0
+                let band = fractional > bayerValue ? floorBand + 1 : floorBand
+                let clampedBand = min(max(band, 0), paletteCount - 1)
+                result[cellIndex] = paletteCell(bandToPalette[clampedBand], palette: palette)
+            }
+        }
+
+        return result
+    }
+
+    // MARK: - 4. Outline
 
     private static func applyOutline(
         colors: [PixelColor],
