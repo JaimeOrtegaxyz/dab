@@ -25,13 +25,9 @@ These are true of the current app as implemented.
 - The current square-cell SVG export is deliberately literal: each non-transparent pixel becomes its own 1x1 square in the SVG grid, with no geometry merging.
 - The export background is transparent.
 - The app exists first as an internal tool for generating iconography for Surface & Logic, and then as a tool that can be shared publicly.
-- The app currently offers seven filters:
+- The app currently offers three filters:
   - Color Match
   - Threshold
-  - Otsu
-  - Adaptive
-  - Contrast
-  - Clean
   - Outline
 
 ## Origin Story And Why It Matters
@@ -155,13 +151,9 @@ The filters are not just "effects." They are alternate decision systems for how 
 
 The filters are:
 
-- Color Match: maps cells to the nearest non-transparent palette color, with transparent handled as an ordered brightness band when present
-- Threshold: maps brightness into ordered palette bands
-- Otsu: automatically derives brightness bands from the sampled image
-- Adaptive: maps local contrast into ordered palette bands
-- Contrast: boosts low-contrast samples before palette matching
-- Clean: simplifies color noise through neighborhood cleanup
-- Outline: focuses on edges and boundaries
+- Color Match: maps each source pixel to the nearest non-transparent palette color and picks the majority winner per cell. Transparent assignment is handled separately by an ordered brightness band when the palette includes a transparent swatch. This is the default and the most color-faithful option.
+- Threshold: collapses each cell's average brightness into ordered palette bands. The palette is internally sorted by brightness for band assignment so the threshold slider behaves predictably regardless of how the user has arranged the palette in the editor. The slider biases the whole image toward darker or brighter swatches.
+- Outline: edge detection. Edge cells take the nearest palette color of their underlying source; non-edge cells take the background (the first transparent swatch if present, otherwise the brightest non-transparent swatch). The slider controls edge sensitivity.
 
 If another LLM is asked to propose future filters, the guiding question should be:
 

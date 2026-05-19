@@ -100,14 +100,6 @@ final class CaptureViewModel: ObservableObject {
             filterMode = .colorMatch
         case 19:
             filterMode = .threshold
-        case 20:
-            filterMode = .otsu
-        case 21:
-            filterMode = .adaptive
-        case 23:
-            filterMode = .contrastBoost
-        case 22:
-            filterMode = .cleanThreshold
         case 26:
             filterMode = .edgeDetect
         case 3:
