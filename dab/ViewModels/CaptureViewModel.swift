@@ -167,24 +167,69 @@ final class CaptureViewModel: ObservableObject {
             let currentViewportSize = viewportSize
             let currentThreshold = brightnessThreshold
             let currentFilterMode = filterMode
-            let currentPalette = palette
             let currentInverted = isInverted
             let currentHorizontalMirrorMode = horizontalMirrorMode
             let currentVerticalMirrorMode = verticalMirrorMode
             let currentRounded = isRounded
 
-            guard let colors = captureService.colorGrid(
-                at: currentMouse,
-                size: currentViewportSize,
-                gridSize: currentGridSize
-            ) else { return }
-            var newGrid = GridState(size: currentGridSize, palette: currentPalette)
+            // Normalize the palette once. The same normalized list is shared
+            // by the sampler (so vote indices reference the right entries)
+            // and the filter (so vote indices line up with palette[i]).
+            let normalizedPalette = GridFilters.normalize(palette: palette)
+
+            let colors: [PixelColor]
+            let paletteVotes: [Int?]?
+
+            if currentFilterMode == .colorMatch {
+                // Build the vote palette: non-transparent swatches plus the
+                // map back to their indices in the full normalized palette.
+                var voteColors: [PixelColor] = []
+                var voteToFullIndex: [Int] = []
+                for (index, swatch) in normalizedPalette.enumerated() where !swatch.isTransparent {
+                    voteColors.append(swatch.color)
+                    voteToFullIndex.append(index)
+                }
+
+                if voteColors.isEmpty {
+                    // No non-transparent swatches; falls back to average path.
+                    guard let averages = captureService.colorGrid(
+                        at: currentMouse,
+                        size: currentViewportSize,
+                        gridSize: currentGridSize
+                    ) else { return }
+                    colors = averages
+                    paletteVotes = nil
+                } else {
+                    guard let bundle = captureService.colorAndVoteGrid(
+                        at: currentMouse,
+                        size: currentViewportSize,
+                        gridSize: currentGridSize,
+                        votePalette: voteColors
+                    ) else { return }
+                    colors = bundle.colors
+                    paletteVotes = bundle.votes.map { vote in
+                        guard let vote, vote >= 0, vote < voteToFullIndex.count else { return nil }
+                        return voteToFullIndex[vote]
+                    }
+                }
+            } else {
+                guard let averages = captureService.colorGrid(
+                    at: currentMouse,
+                    size: currentViewportSize,
+                    gridSize: currentGridSize
+                ) else { return }
+                colors = averages
+                paletteVotes = nil
+            }
+
+            var newGrid = GridState(size: currentGridSize, palette: normalizedPalette)
             newGrid.cells = GridFilters.apply(
                 currentFilterMode,
                 colors: colors,
                 gridSize: currentGridSize,
-                palette: currentPalette,
-                threshold: currentThreshold
+                palette: normalizedPalette,
+                threshold: currentThreshold,
+                paletteVotes: paletteVotes
             )
             newGrid.isInverted = currentInverted
             newGrid.horizontalMirrorMode = currentHorizontalMirrorMode

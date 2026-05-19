@@ -82,6 +82,35 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         return pixelBuffer.colorGrid(in: cropRect, gridSize: gridSize)
     }
 
+    /// Returns both per-cell RGB averages and per-cell palette-vote winners
+    /// from a single locked pass of the latest captured frame. Both arrays
+    /// come from the same `FrameSnapshot`, so callers don't risk pairing
+    /// averages from one frame with votes from another.
+    func colorAndVoteGrid(
+        at mouseLocation: NSPoint,
+        size: CGFloat,
+        gridSize: Int,
+        votePalette: [PixelColor]
+    ) -> (colors: [PixelColor], votes: [Int?])? {
+        guard let screen = Self.screen(containing: mouseLocation) else {
+            return nil
+        }
+
+        ensureStream(for: screen)
+
+        guard let snapshot = latestFrameSnapshot(),
+              let pixelBuffer = CMSampleBufferGetImageBuffer(snapshot.sampleBuffer) else {
+            return nil
+        }
+
+        let cropRect = cropRect(around: mouseLocation, size: size, in: snapshot)
+        return pixelBuffer.colorAndVoteGrid(
+            in: cropRect,
+            gridSize: gridSize,
+            votePalette: votePalette
+        )
+    }
+
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
         guard outputType == .screen,
               CMSampleBufferIsValid(sampleBuffer),

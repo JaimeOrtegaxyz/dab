@@ -6,13 +6,19 @@ enum GridFilters {
         colors: [PixelColor],
         gridSize: Int,
         palette: [PaletteSwatch],
-        threshold: Float
+        threshold: Float,
+        paletteVotes: [Int?]? = nil
     ) -> [GridCell] {
-        let palette = normalizedPalette(palette)
+        let palette = normalize(palette: palette)
 
         switch mode {
         case .colorMatch:
-            return applyColorMatch(colors: colors, palette: palette, threshold: threshold)
+            return applyColorMatch(
+                colors: colors,
+                palette: palette,
+                threshold: threshold,
+                paletteVotes: paletteVotes
+            )
         case .threshold:
             return applyThresholdBands(colors: colors, palette: palette, threshold: threshold)
         case .otsu:
@@ -28,7 +34,10 @@ enum GridFilters {
         }
     }
 
-    private static func normalizedPalette(_ palette: [PaletteSwatch]) -> [PaletteSwatch] {
+    /// Public so callers can normalize the palette once before sampling and
+    /// then pass the *same* normalized palette into `apply` — keeping vote
+    /// indices and filter indices aligned.
+    static func normalize(palette: [PaletteSwatch]) -> [PaletteSwatch] {
         let trimmed = Array(palette.prefix(8))
         return trimmed.isEmpty ? PaletteSwatch.defaultPalette : trimmed
     }
@@ -65,12 +74,29 @@ enum GridFilters {
 
     // MARK: - 1. Color Match
 
-    private static func applyColorMatch(colors: [PixelColor], palette: [PaletteSwatch], threshold: Float) -> [GridCell] {
-        colors.map { color in
+    private static func applyColorMatch(
+        colors: [PixelColor],
+        palette: [PaletteSwatch],
+        threshold: Float,
+        paletteVotes: [Int?]? = nil
+    ) -> [GridCell] {
+        colors.enumerated().map { index, color in
+            // Transparent-band assignment is brightness-driven and stays as
+            // it was: cells whose averaged brightness falls into the band
+            // occupied by a transparent swatch become transparent.
             if let transparentIndex = transparentBandIndex(for: color, palette: palette, threshold: threshold) {
                 return paletteCell(transparentIndex, palette: palette)
             }
 
+            // If the sampling layer voted on this cell, trust the vote — it
+            // reflects per-source-pixel matches and avoids the phantom-color
+            // artifact you'd get by matching an averaged blend.
+            if let votes = paletteVotes, index < votes.count, let voteIndex = votes[index] {
+                return paletteCell(voteIndex, palette: palette)
+            }
+
+            // Fallback: no vote (zero source pixels for this cell, or the
+            // caller didn't provide votes). Match against the averaged color.
             guard let nearest = nearestColorIndex(for: color, palette: palette) else {
                 return paletteCell(0, palette: palette)
             }
