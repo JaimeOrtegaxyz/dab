@@ -391,7 +391,9 @@ struct OverlayHostView: View {
             filterMode: viewModel.filterMode,
             isInverted: viewModel.isInverted,
             horizontalMirrorMode: viewModel.horizontalMirrorMode,
-            verticalMirrorMode: viewModel.verticalMirrorMode
+            verticalMirrorMode: viewModel.verticalMirrorMode,
+            isRandomizing: viewModel.isRandomizing,
+            randomVariationIndex: viewModel.randomVariationIndex
         )
     }
 }

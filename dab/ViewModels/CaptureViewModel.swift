@@ -14,6 +14,8 @@ final class CaptureViewModel: ObservableObject {
     @Published var isRounded: Bool = false
     @Published var isActive: Bool = false
     @Published var lastSavedURL: URL?
+    @Published var isRandomizing: Bool = false
+    @Published var randomVariationIndex: Int = 0
 
     private let captureService = ScreenCaptureService()
     private var timer: DispatchSourceTimer?
@@ -29,12 +31,16 @@ final class CaptureViewModel: ObservableObject {
         palette = settings.palette
         horizontalMirrorMode = settings.horizontalMirrorMode
         verticalMirrorMode = settings.verticalMirrorMode
+        randomVariationIndex = settings.lastRandomVariationIndex
     }
 
     func activate() {
         loadSettings()
         isInverted = false
         isRounded = false
+        // The randomizer is a deliberate, modal action — never auto-enter
+        // it on capture start, even if the last session ended inside it.
+        isRandomizing = false
         syncCurrentGridPresentation()
         isActive = true
     }
@@ -104,6 +110,21 @@ final class CaptureViewModel: ObservableObject {
             filterMode = .halftone
         case 26:
             filterMode = .edgeDetect
+        case 6:
+            // Z — toggle the palette randomizer. Entering re-applies the
+            // last-used variation index; exiting reverts to the user's
+            // real palette but keeps the index for next time.
+            isRandomizing.toggle()
+        case 30:
+            // ] — next variation (only meaningful while randomizing).
+            guard isRandomizing else { return false }
+            randomVariationIndex &+= 1
+            AppSettings.shared.lastRandomVariationIndex = randomVariationIndex
+        case 33:
+            // [ — previous variation.
+            guard isRandomizing else { return false }
+            randomVariationIndex &-= 1
+            AppSettings.shared.lastRandomVariationIndex = randomVariationIndex
         case 3:
             let all = FilterMode.allCases
             let idx = all.firstIndex(of: filterMode) ?? 0
@@ -119,7 +140,8 @@ final class CaptureViewModel: ObservableObject {
 
     private func allowsKeyRepeat(for keyCode: UInt16) -> Bool {
         switch keyCode {
-        case 123, 124, 125, 126, 24, 27, 69, 78:
+        case 123, 124, 125, 126, 24, 27, 69, 78,
+             30, 33: // ] and [ in randomizer mode
             return true
         default:
             return false
@@ -166,10 +188,19 @@ final class CaptureViewModel: ObservableObject {
             let currentVerticalMirrorMode = verticalMirrorMode
             let currentRounded = isRounded
 
-            // Normalize the palette once. The same normalized list is shared
-            // by the sampler (so vote indices reference the right entries)
-            // and the filter (so vote indices line up with palette[i]).
-            let normalizedPalette = GridFilters.normalize(palette: palette)
+            // Normalize the palette once. The filter and sampling layers
+            // always see this original ordering — that's what produces the
+            // structurally correct "which color belongs here" assignment.
+            //
+            // When the randomizer is active, we permute the swatches into
+            // a different positional order for *rendering* only. Cell k
+            // still gets the swatch the filter chose, but rendering looks
+            // that index up in the permuted palette — so the same set of
+            // colors ends up painted into different regions of the output.
+            let baseNormalizedPalette = GridFilters.normalize(palette: palette)
+            let renderPalette = isRandomizing
+                ? PaletteVariator.variation(of: baseNormalizedPalette, seed: randomVariationIndex)
+                : baseNormalizedPalette
 
             let colors: [PixelColor]
             let paletteVotes: [Int?]?
@@ -179,7 +210,7 @@ final class CaptureViewModel: ObservableObject {
                 // map back to their indices in the full normalized palette.
                 var voteColors: [PixelColor] = []
                 var voteToFullIndex: [Int] = []
-                for (index, swatch) in normalizedPalette.enumerated() where !swatch.isTransparent {
+                for (index, swatch) in baseNormalizedPalette.enumerated() where !swatch.isTransparent {
                     voteColors.append(swatch.color)
                     voteToFullIndex.append(index)
                 }
@@ -216,12 +247,12 @@ final class CaptureViewModel: ObservableObject {
                 paletteVotes = nil
             }
 
-            var newGrid = GridState(size: currentGridSize, palette: normalizedPalette)
+            var newGrid = GridState(size: currentGridSize, palette: renderPalette)
             newGrid.cells = GridFilters.apply(
                 currentFilterMode,
                 colors: colors,
                 gridSize: currentGridSize,
-                palette: normalizedPalette,
+                palette: baseNormalizedPalette,
                 threshold: currentThreshold,
                 paletteVotes: paletteVotes
             )

@@ -21,6 +21,7 @@ These are true of the current app as implemented.
 - The default palette is black, green, red, yellow, and blue.
 - The user can change grid size, viewport size, resize step, brightness threshold, filter mode, palette colors, horizontal flip, vertical flip, save location, filename format, and activation hotkey.
 - The user can invert the preview into a negative mode while the overlay is active.
+- The user can enter a "randomizer" mode while the overlay is active. Pressing Z toggles it on; while on, `]` and `[` step through deterministically hue-rotated variations of the current palette. The user's stored palette is never modified — randomization is a view layer on top. Saving a frame while randomizing exports whatever variation is currently displayed. The last-used variation index persists across sessions, but the randomizer itself always starts off when the overlay is summoned.
 - The user can save the current result as an SVG.
 - The current square-cell SVG export is deliberately literal: each non-transparent pixel becomes its own 1x1 square in the SVG grid, with no geometry merging.
 - The export background is transparent.

@@ -40,6 +40,14 @@ final class AppSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "filterMode") }
     }
 
+    /// The most-recent palette-randomizer seed. Persisted so re-entering the
+    /// randomizer in a future session resumes on the variation the user was
+    /// last looking at (whether they exited or accepted it via a save).
+    var lastRandomVariationIndex: Int {
+        get { UserDefaults.standard.object(forKey: "lastRandomVariationIndex") as? Int ?? 0 }
+        set { UserDefaults.standard.set(newValue, forKey: "lastRandomVariationIndex") }
+    }
+
     var palette: [PaletteSwatch] {
         get {
             guard let data = UserDefaults.standard.data(forKey: "paletteSwatches"),

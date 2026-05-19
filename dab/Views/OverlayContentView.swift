@@ -20,6 +20,8 @@ struct OverlayContentView: View {
     let isInverted: Bool
     let horizontalMirrorMode: HorizontalMirrorMode
     let verticalMirrorMode: VerticalMirrorMode
+    let isRandomizing: Bool
+    let randomVariationIndex: Int
 
     var body: some View {
         VStack(spacing: 0) {
@@ -69,6 +71,10 @@ struct OverlayContentView: View {
             // Info bar
             HStack {
                 Text(filterMode.shortDisplayName)
+                if isRandomizing {
+                    Text("random \(randomVariationIndex)")
+                        .foregroundColor(.cyan)
+                }
                 if isInverted {
                     Text("Negative")
                         .foregroundColor(.yellow)
