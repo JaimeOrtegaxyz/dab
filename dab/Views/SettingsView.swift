@@ -133,6 +133,72 @@ private struct WatchButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Palette tile helpers
+
+private struct CheckerboardFill: View {
+    var cell: CGFloat = 5
+    var light: Color = Color(white: 0.92)
+    var dark: Color = Color(white: 0.55)
+
+    var body: some View {
+        Canvas { ctx, size in
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(light))
+            let cols = Int(ceil(size.width / cell))
+            let rows = Int(ceil(size.height / cell))
+            for r in 0..<rows {
+                for c in 0..<cols {
+                    guard (r + c) % 2 == 0 else { continue }
+                    let rect = CGRect(
+                        x: CGFloat(c) * cell,
+                        y: CGFloat(r) * cell,
+                        width: cell,
+                        height: cell
+                    )
+                    ctx.fill(Path(rect), with: .color(dark))
+                }
+            }
+        }
+    }
+}
+
+private struct LCDBootModifier: ViewModifier, Animatable {
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let p = max(0, min(1, progress))
+        content
+            .scaleEffect(x: 1, y: max(0.001, p), anchor: .top)
+            .opacity(Double(p))
+            .overlay(
+                GeometryReader { proxy in
+                    Rectangle()
+                        .fill(WatchTheme.lcdGreen)
+                        .frame(height: 1.5)
+                        .opacity(p < 0.98 ? 0.9 : 0)
+                        .offset(y: proxy.size.height * p)
+                        .allowsHitTesting(false)
+                }
+            )
+    }
+}
+
+extension AnyTransition {
+    static var lcdBoot: AnyTransition {
+        .asymmetric(
+            insertion: .modifier(
+                active: LCDBootModifier(progress: 0),
+                identity: LCDBootModifier(progress: 1)
+            ),
+            removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+        )
+    }
+}
+
 // MARK: - Custom case-yellow stepper (black arrows, on the left)
 
 private struct CaseStepperButtonStyle: ButtonStyle {
@@ -198,6 +264,7 @@ struct SettingsView: View {
     @State private var hotkeyDisplayString: String = AppSettings.shared.hotkeyDisplayString
     @State private var filenamePreview: String = ""
     @State private var palette: [PaletteSwatch] = PaletteSwatch.defaultPalette
+    @State private var selectedSwatchID: UUID? = nil
     @State private var keyMonitor: Any?
     @FocusState private var isFilenameFieldFocused: Bool
 
@@ -359,39 +426,24 @@ struct SettingsView: View {
                 .buttonStyle(WatchButtonStyle())
 
                 Spacer()
+                LCDChip(width: 48) {
+                    Text("\(palette.count)/8")
+                }
             }
 
             SilkscreenRule()
 
-            ForEach(palette.indices, id: \.self) { index in
-                paletteRow(index)
-                if index < palette.count - 1 {
-                    SilkscreenRule()
-                }
-            }
+            paletteTileGrid
 
-            if palette.count < 8 {
+            if let id = selectedSwatchID,
+               let idx = palette.firstIndex(where: { $0.id == id }) {
                 SilkscreenRule()
-                HStack(spacing: 8) {
-                    Button("add color") {
-                        addPaletteColor()
-                    }
-                    .buttonStyle(WatchButtonStyle())
-
-                    if !palette.contains(where: \.isTransparent) {
-                        Button("add transparent") {
-                            addTransparentSwatch()
-                        }
-                        .buttonStyle(WatchButtonStyle())
-                    }
-
-                    Spacer()
-                    LCDChip(width: 48) {
-                        Text("\(palette.count)/8")
-                    }
-                }
+                paletteEditor(index: idx)
+                    .transition(.lcdBoot)
             }
         }
+        .animation(.easeOut(duration: 0.22), value: selectedSwatchID)
+        .animation(.easeOut(duration: 0.22), value: palette.count)
 
         sectionShell("mirror output") {
             settingsRow("horizontal") {
@@ -578,53 +630,109 @@ struct SettingsView: View {
         .fixedSize()
     }
 
+    private var paletteTileGrid: some View {
+        let columns = Array(repeating: GridItem(.fixed(56), spacing: 8), count: 4)
+        return LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            ForEach(palette) { swatch in
+                paletteTile(for: swatch)
+            }
+            if palette.count < 8 {
+                addTile
+            }
+        }
+    }
+
     @ViewBuilder
-    private func paletteRow(_ index: Int) -> some View {
-        if palette.indices.contains(index) {
-            HStack(spacing: 8) {
-                Text("swatch \(index + 1)")
-                    .font(WatchFont.body(11, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(WatchTheme.caseInk)
-
-                Spacer()
-
-                if palette[index].isTransparent {
-                    LCDChip(width: 108) {
-                        Text("transparent")
-                    }
-
-                    Button("make color") {
-                        palette[index].isTransparent = false
-                        savePalette()
-                    }
-                    .buttonStyle(WatchButtonStyle())
+    private func paletteTile(for swatch: PaletteSwatch) -> some View {
+        let isSelected = selectedSwatchID == swatch.id
+        Button {
+            selectedSwatchID = (isSelected ? nil : swatch.id)
+        } label: {
+            ZStack {
+                if swatch.isTransparent {
+                    CheckerboardFill()
                 } else {
-                    ColorPicker(
-                        "",
-                        selection: paletteColorBinding(for: index),
-                        supportsOpacity: false
+                    Color(pixelColor: swatch.color)
+                }
+            }
+            .frame(width: 56, height: 40)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(WatchTheme.caseInk, lineWidth: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(WatchTheme.caseYellow, lineWidth: isSelected ? 2 : 0)
+                    .padding(-2)
+            )
+            .shadow(color: .black.opacity(0.18), radius: 1, y: 1)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var addTile: some View {
+        Button {
+            addPaletteColorAndSelect()
+        } label: {
+            ZStack {
+                WatchTheme.caseYellow.opacity(0.25)
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WatchTheme.caseInk.opacity(0.7))
+            }
+            .frame(width: 56, height: 40)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(
+                        WatchTheme.caseInk.opacity(0.6),
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 2])
                     )
-                    .labelsHidden()
-                    .frame(width: 30)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 
-                    LCDChip(width: 84) {
-                        Text(palette[index].color.hexString.lowercased())
-                    }
+    @ViewBuilder
+    private func paletteEditor(index: Int) -> some View {
+        let swatch = palette[index]
+        HStack(spacing: 8) {
+            Text("swatch \(index + 1)")
+                .font(WatchFont.body(11, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(WatchTheme.caseInk)
 
-                    Button("transparent") {
-                        palette[index].isTransparent = true
-                        savePalette()
-                    }
-                    .buttonStyle(WatchButtonStyle())
+            Spacer()
+
+            if swatch.isTransparent {
+                LCDChip(width: 122) {
+                    Text("transparent")
                 }
+            } else {
+                ColorPicker(
+                    "",
+                    selection: paletteColorBinding(for: index),
+                    supportsOpacity: false
+                )
+                .labelsHidden()
+                .frame(width: 30)
 
-                if palette.count > 1 {
-                    Button("remove") {
-                        removePaletteSwatch(at: index)
-                    }
-                    .buttonStyle(WatchButtonStyle())
+                LCDChip(width: 84) {
+                    Text(swatch.color.hexString.lowercased())
                 }
+            }
+
+            Button(swatch.isTransparent ? "make color" : "transparent") {
+                toggleTransparent(at: index)
+            }
+            .buttonStyle(WatchButtonStyle())
+
+            if palette.count > 1 {
+                Button("remove") {
+                    removeSelectedSwatch(at: index)
+                }
+                .buttonStyle(WatchButtonStyle())
             }
         }
     }
@@ -652,24 +760,36 @@ struct SettingsView: View {
         if palette.isEmpty {
             palette = PaletteSwatch.defaultPalette
         }
+        if let id = selectedSwatchID, !palette.contains(where: { $0.id == id }) {
+            selectedSwatchID = nil
+        }
         savePalette()
     }
 
-    private func addPaletteColor() {
+    private func addPaletteColorAndSelect() {
         guard palette.count < 8 else { return }
-        palette.append(PaletteSwatch(color: PixelColor(hex: "#FFFFFF")!))
+        let newSwatch = PaletteSwatch(color: PixelColor(hex: "#FFFFFF")!)
+        palette.append(newSwatch)
+        selectedSwatchID = newSwatch.id
         savePalette()
     }
 
-    private func addTransparentSwatch() {
-        guard palette.count < 8 else { return }
-        palette.append(PaletteSwatch(color: PixelColor(hex: "#000000")!, isTransparent: true))
-        savePalette()
-    }
-
-    private func removePaletteSwatch(at index: Int) {
+    private func removeSelectedSwatch(at index: Int) {
         guard palette.count > 1, palette.indices.contains(index) else { return }
         palette.remove(at: index)
+        selectedSwatchID = nil
+        savePalette()
+    }
+
+    private func toggleTransparent(at index: Int) {
+        guard palette.indices.contains(index) else { return }
+        let newState = !palette[index].isTransparent
+        if newState {
+            for i in palette.indices where i != index && palette[i].isTransparent {
+                palette[i].isTransparent = false
+            }
+        }
+        palette[index].isTransparent = newState
         savePalette()
     }
 
