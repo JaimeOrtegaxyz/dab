@@ -4,54 +4,105 @@ enum SVGExporter {
     /// Generates an SVG string from the current grid state.
     static func generateSVG(from grid: GridState) -> String {
         let n = grid.size
-
-        if grid.isRounded {
-            var pathElements: [String] = []
-
-            for paletteIndex in grid.usedEffectivePaletteIndices() {
-                guard paletteIndex < grid.palette.count else { continue }
-                let fill = grid.palette[paletteIndex].color.hexString
-                let boundaryPathData = RoundedGridPath.svgBoundaryPathData(
-                    for: grid,
-                    matchingPaletteIndex: paletteIndex
-                )
-                let bridgePathData = RoundedGridPath.svgBridgePathData(
-                    for: grid,
-                    matchingPaletteIndex: paletteIndex
-                )
-
-                if !boundaryPathData.isEmpty {
-                    pathElements.append("<path d=\"\(boundaryPathData)\" fill=\"\(fill)\" fill-rule=\"evenodd\"/>")
-                }
-                if !bridgePathData.isEmpty {
-                    pathElements.append("<path d=\"\(bridgePathData)\" fill=\"\(fill)\"/>")
-                }
-            }
-
-            return """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
-            \(pathElements.joined(separator: "\n"))
-            </svg>
-            """
+        switch grid.renderMode {
+        case .squares:
+            return squareSVG(grid: grid, n: n)
+        case .dots:
+            return dotsSVG(grid: grid, n: n)
+        case .blobs:
+            return blobsSVG(grid: grid, n: n)
         }
+    }
 
+    private static func cellRects(for grid: GridState, n: Int) -> [String] {
         var rects: [String] = []
-
         for row in 0..<n {
             for col in 0..<n {
-                guard let swatch = grid.effectiveSwatch(row: row, col: col) else {
-                    continue
-                }
-
+                guard let swatch = grid.effectiveSwatch(row: row, col: col) else { continue }
                 rects.append("  <rect x=\"\(col)\" y=\"\(row)\" width=\"1\" height=\"1\" fill=\"\(swatch.color.hexString)\"/>")
             }
         }
+        return rects
+    }
 
-        return """
+    private static func emptySVG(n: Int) -> String {
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)"></svg>
+        """
+    }
+
+    private static func squareSVG(grid: GridState, n: Int) -> String {
+        """
         <?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)" shape-rendering="crispEdges">
-        \(rects.joined(separator: "\n"))
+        \(cellRects(for: grid, n: n).joined(separator: "\n"))
+        </svg>
+        """
+    }
+
+    /// Dots: rounded blobs over a single dominant-color background grout.
+    private static func dotsSVG(grid: GridState, n: Int) -> String {
+        let indices = grid.usedEffectivePaletteIndices()
+        let squareClip = RoundedGridPath.svgSquarePathData(for: grid, matchingPaletteIndex: nil)
+        guard !indices.isEmpty, !squareClip.isEmpty else { return emptySVG(n: n) }
+
+        var grout: [String] = []
+        if let dom = grid.dominantPaletteIndex(), dom < grid.palette.count {
+            // Fill the whole silhouette with the dominant color (clipped to it).
+            grout.append("  <path d=\"\(squareClip)\" fill=\"\(grid.palette[dom].color.hexString)\" fill-rule=\"evenodd\"/>")
+        }
+        return wrapRounded(n: n, clip: squareClip, parts: grout + blobParts(for: grid, indices: indices))
+    }
+
+    /// Blobs: rounded blobs over a palette-order grout (lowest index wins gaps).
+    private static func blobsSVG(grid: GridState, n: Int) -> String {
+        let indices = grid.usedEffectivePaletteIndices()
+        let squareClip = RoundedGridPath.svgSquarePathData(for: grid, matchingPaletteIndex: nil)
+        guard !indices.isEmpty, !squareClip.isEmpty else { return emptySVG(n: n) }
+
+        var grout: [String] = []
+        // Dilated square regions (stroke-width 1 = half-cell dilation), highest
+        // palette index first so the lowest index wins the contested gaps.
+        for index in indices.reversed() where index < grid.palette.count {
+            let fill = grid.palette[index].color.hexString
+            let square = RoundedGridPath.svgSquarePathData(for: grid, matchingPaletteIndex: index)
+            if !square.isEmpty {
+                grout.append("  <path d=\"\(square)\" fill=\"\(fill)\" stroke=\"\(fill)\" stroke-width=\"1\" stroke-linejoin=\"round\" fill-rule=\"evenodd\"/>")
+            }
+        }
+        return wrapRounded(n: n, clip: squareClip, parts: grout + blobParts(for: grid, indices: indices))
+    }
+
+    /// Per-color rounded blobs + diagonal bridges, lowest to highest. Shared by
+    /// Dots and Blobs (they differ only in their grout).
+    private static func blobParts(for grid: GridState, indices: [Int]) -> [String] {
+        var parts: [String] = []
+        for index in indices where index < grid.palette.count {
+            let fill = grid.palette[index].color.hexString
+            let blob = RoundedGridPath.svgBoundaryPathData(for: grid, matchingPaletteIndex: index)
+            if !blob.isEmpty {
+                parts.append("  <path d=\"\(blob)\" fill=\"\(fill)\" fill-rule=\"evenodd\"/>")
+            }
+            let bridge = RoundedGridPath.svgBridgePathData(for: grid, matchingPaletteIndex: index)
+            if !bridge.isEmpty {
+                parts.append("  <path d=\"\(bridge)\" fill=\"\(fill)\"/>")
+            }
+        }
+        return parts
+    }
+
+    /// Wraps grout + blob paths in a clip to the square outer silhouette.
+    private static func wrapRounded(n: Int, clip: String, parts: [String]) -> String {
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(n) \(n)" width="\(n * 10)" height="\(n * 10)">
+        <defs>
+        <clipPath id="rounded"><path d="\(clip)" clip-rule="evenodd"/></clipPath>
+        </defs>
+        <g clip-path="url(#rounded)">
+        \(parts.joined(separator: "\n"))
+        </g>
         </svg>
         """
     }

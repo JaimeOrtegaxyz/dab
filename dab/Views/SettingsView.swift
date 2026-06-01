@@ -532,7 +532,7 @@ struct SettingsView: View {
             SilkscreenRule()
             shortcutRow("space", "toggle negative")
             SilkscreenRule()
-            shortcutRow("r", "toggle round mode")
+            shortcutRow("r", "cycle squares / dots / blobs")
             SilkscreenRule()
             shortcutRow("h", "cycle horizontal mirror")
             SilkscreenRule()

@@ -75,32 +75,63 @@ enum RoundedGridPath {
         }
     }
 
+    // MARK: - CoreGraphics paths (live preview)
+
+    /// Rounded boundary of the matching cells (every corner rounded — the blob
+    /// look; a filled grout always sits behind in Dots/Blobs mode).
     static func cgPath(for grid: GridState, in rect: CGRect, matchingPaletteIndex: Int? = nil) -> CGPath {
         let path = CGMutablePath()
         let loops = simplifiedBoundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex)
-        let bridgeCenters = diagonalBridgeCenters(for: grid, matchingPaletteIndex: matchingPaletteIndex)
-        guard !loops.isEmpty || !bridgeCenters.isEmpty else { return path }
+        guard !loops.isEmpty else { return path }
 
         let cellWidth = rect.width / CGFloat(grid.size)
         let cellHeight = rect.height / CGFloat(grid.size)
         let radius = min(cellWidth, cellHeight) / 2
 
         for loop in loops {
-            let points = loop.map {
-                CGPoint(
-                    x: rect.minX + CGFloat($0.x) * cellWidth,
-                    y: rect.minY + CGFloat($0.y) * cellHeight
-                )
-            }
+            let points = loop.map { point(for: $0, in: rect, cellWidth: cellWidth, cellHeight: cellHeight) }
             appendRoundedLoop(points, radius: radius, to: path)
         }
 
-        for center in bridgeCenters {
+        return path
+    }
+
+    /// Un-rounded (square) boundary of the matching cells — used for the Round
+    /// grout regions and the square outer clip.
+    static func squareCGPath(for grid: GridState, in rect: CGRect, matchingPaletteIndex: Int? = nil) -> CGPath {
+        let path = CGMutablePath()
+        let loops = simplifiedBoundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex)
+        guard !loops.isEmpty else { return path }
+
+        let cellWidth = rect.width / CGFloat(grid.size)
+        let cellHeight = rect.height / CGFloat(grid.size)
+
+        for loop in loops {
+            let points = loop.map { point(for: $0, in: rect, cellWidth: cellWidth, cellHeight: cellHeight) }
+            guard let first = points.first else { continue }
+            path.move(to: first)
+            for p in points.dropFirst() { path.addLine(to: p) }
+            path.closeSubpath()
+        }
+
+        return path
+    }
+
+    /// Diagonal "bridge" diamonds that connect matching cells touching only at a
+    /// corner (with both off-diagonal cells inactive). Round mode draws these so
+    /// a diagonal run of same-color cells reads as a connected ribbon.
+    static func bridgeCGPath(for grid: GridState, in rect: CGRect, matchingPaletteIndex: Int? = nil) -> CGPath {
+        let path = CGMutablePath()
+        let centers = diagonalBridgeCenters(for: grid, matchingPaletteIndex: matchingPaletteIndex)
+        guard !centers.isEmpty else { return path }
+
+        let cellWidth = rect.width / CGFloat(grid.size)
+        let cellHeight = rect.height / CGFloat(grid.size)
+        let radius = min(cellWidth, cellHeight) / 2
+
+        for center in centers {
             appendDiagonalBridge(
-                at: CGPoint(
-                    x: rect.minX + CGFloat(center.x) * cellWidth,
-                    y: rect.minY + CGFloat(center.y) * cellHeight
-                ),
+                at: point(for: center, in: rect, cellWidth: cellWidth, cellHeight: cellHeight),
                 radius: radius,
                 to: path
             )
@@ -109,11 +140,29 @@ enum RoundedGridPath {
         return path
     }
 
+    private static func point(for gp: GridPoint, in rect: CGRect, cellWidth: CGFloat, cellHeight: CGFloat) -> CGPoint {
+        CGPoint(x: rect.minX + CGFloat(gp.x) * cellWidth, y: rect.minY + CGFloat(gp.y) * cellHeight)
+    }
+
+    // MARK: - SVG path data (export)
+
     static func svgBoundaryPathData(for grid: GridState, matchingPaletteIndex: Int? = nil) -> String {
         simplifiedBoundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex)
             .map { loop in
                 let points = loop.map { CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)) }
-                return svgPath(for: points, radius: 0.5)
+                return svgRoundedPath(for: points, radius: 0.5)
+            }
+            .joined(separator: " ")
+    }
+
+    static func svgSquarePathData(for grid: GridState, matchingPaletteIndex: Int? = nil) -> String {
+        simplifiedBoundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex)
+            .map { loop in
+                guard let first = loop.first else { return "" }
+                var commands = ["M \(first.x) \(first.y)"]
+                for p in loop.dropFirst() { commands.append("L \(p.x) \(p.y)") }
+                commands.append("Z")
+                return commands.joined(separator: " ")
             }
             .joined(separator: " ")
     }
@@ -123,6 +172,8 @@ enum RoundedGridPath {
             .map { svgDiagonalBridge(at: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)), radius: 0.5) }
             .joined(separator: " ")
     }
+
+    // MARK: - Boundary tracing
 
     private static func simplifiedBoundaryLoops(for grid: GridState, matchingPaletteIndex: Int?) -> [[GridPoint]] {
         boundaryLoops(for: grid, matchingPaletteIndex: matchingPaletteIndex).map(simplify)
@@ -284,6 +335,8 @@ enum RoundedGridPath {
         return simplified
     }
 
+    // MARK: - Corner rounding
+
     private static func appendRoundedLoop(_ points: [CGPoint], radius: CGFloat, to path: CGMutablePath) {
         let corners = roundedCorners(for: points, radius: radius)
         guard !corners.isEmpty else { return }
@@ -300,7 +353,7 @@ enum RoundedGridPath {
         path.closeSubpath()
     }
 
-    private static func svgPath(for points: [CGPoint], radius: CGFloat) -> String {
+    private static func svgRoundedPath(for points: [CGPoint], radius: CGFloat) -> String {
         let corners = roundedCorners(for: points, radius: radius)
         guard let first = corners.first else { return "" }
 
@@ -316,6 +369,43 @@ enum RoundedGridPath {
         commands.append("Z")
         return commands.joined(separator: " ")
     }
+
+    private static func roundedCorners(for points: [CGPoint], radius: CGFloat) -> [RoundedCorner] {
+        guard points.count >= 3 else { return [] }
+
+        var corners: [RoundedCorner] = []
+
+        for index in points.indices {
+            let previous = points[(index - 1 + points.count) % points.count]
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+
+            let incoming = CGPoint(x: current.x - previous.x, y: current.y - previous.y)
+            let outgoing = CGPoint(x: next.x - current.x, y: next.y - current.y)
+            let incomingLength = hypot(incoming.x, incoming.y)
+            let outgoingLength = hypot(outgoing.x, outgoing.y)
+            guard incomingLength > 0, outgoingLength > 0 else { continue }
+
+            // Every corner is rounded (the blob look). Dots/Blobs always paint a
+            // filled grout behind the blobs, so a reflex corner that bulges
+            // outward lands on a painted surface rather than exposing background.
+            let cornerRadius = min(radius, incomingLength / 2, outgoingLength / 2)
+            let entry = CGPoint(
+                x: current.x - incoming.x / incomingLength * cornerRadius,
+                y: current.y - incoming.y / incomingLength * cornerRadius
+            )
+            let exit = CGPoint(
+                x: current.x + outgoing.x / outgoingLength * cornerRadius,
+                y: current.y + outgoing.y / outgoingLength * cornerRadius
+            )
+
+            corners.append(RoundedCorner(entry: entry, corner: current, exit: exit))
+        }
+
+        return corners
+    }
+
+    // MARK: - Diagonal bridges
 
     private static func appendDiagonalBridge(at center: CGPoint, radius: CGFloat, to path: CGMutablePath) {
         let top = CGPoint(x: center.x, y: center.y - radius)
@@ -347,37 +437,7 @@ enum RoundedGridPath {
         ].joined(separator: " ")
     }
 
-    private static func roundedCorners(for points: [CGPoint], radius: CGFloat) -> [RoundedCorner] {
-        guard points.count >= 3 else { return [] }
-
-        var corners: [RoundedCorner] = []
-
-        for index in points.indices {
-            let previous = points[(index - 1 + points.count) % points.count]
-            let current = points[index]
-            let next = points[(index + 1) % points.count]
-
-            let incoming = CGPoint(x: current.x - previous.x, y: current.y - previous.y)
-            let outgoing = CGPoint(x: next.x - current.x, y: next.y - current.y)
-            let incomingLength = hypot(incoming.x, incoming.y)
-            let outgoingLength = hypot(outgoing.x, outgoing.y)
-            guard incomingLength > 0, outgoingLength > 0 else { continue }
-
-            let cornerRadius = min(radius, incomingLength / 2, outgoingLength / 2)
-            let entry = CGPoint(
-                x: current.x - incoming.x / incomingLength * cornerRadius,
-                y: current.y - incoming.y / incomingLength * cornerRadius
-            )
-            let exit = CGPoint(
-                x: current.x + outgoing.x / outgoingLength * cornerRadius,
-                y: current.y + outgoing.y / outgoingLength * cornerRadius
-            )
-
-            corners.append(RoundedCorner(entry: entry, corner: current, exit: exit))
-        }
-
-        return corners
-    }
+    // MARK: - SVG number formatting
 
     private static func svg(_ point: CGPoint) -> String {
         "\(svg(point.x)) \(svg(point.y))"
