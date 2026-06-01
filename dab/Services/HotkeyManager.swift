@@ -12,7 +12,13 @@ final class HotkeyManager {
         self.callback = callback
     }
 
-    func register(keyCode: UInt32, modifiers: UInt32) {
+    /// Registers the global hotkey. Returns `true` on success. On failure
+    /// (e.g. the combo is already claimed system-wide, or `modifiers == 0`
+    /// yields `paramErr`) it rolls back any partial registration and returns
+    /// `false` so callers can surface the problem instead of leaving the user
+    /// with a silently dead hotkey.
+    @discardableResult
+    func register(keyCode: UInt32, modifiers: UInt32) -> Bool {
         unregister()
 
         let hotkeyID = EventHotKeyID(signature: OSType(0x5058_4C52), // "PXLR"
@@ -32,7 +38,7 @@ final class HotkeyManager {
         }
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(
+        let installStatus = InstallEventHandler(
             GetApplicationEventTarget(),
             handlerCallback,
             1,
@@ -40,8 +46,12 @@ final class HotkeyManager {
             selfPtr,
             &eventHandler
         )
+        guard installStatus == noErr else {
+            unregister()
+            return false
+        }
 
-        RegisterEventHotKey(
+        let registerStatus = RegisterEventHotKey(
             keyCode,
             modifiers,
             hotkeyID,
@@ -49,6 +59,14 @@ final class HotkeyManager {
             0,
             &hotkeyRef
         )
+        guard registerStatus == noErr else {
+            // Roll back the installed handler so we don't leave a partial
+            // registration behind.
+            unregister()
+            return false
+        }
+
+        return true
     }
 
     func unregister() {

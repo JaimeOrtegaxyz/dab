@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.toggleOverlay()
         }
         statusBarController.onHotkeyChanged = { [weak self] keyCode, modifiers in
-            self?.hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
+            self?.hotkeyManager.register(keyCode: keyCode, modifiers: modifiers) ?? false
         }
 
         hotkeyManager.callback = { [weak self] in
@@ -337,19 +337,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleEventTap(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        // Re-enable the tap whenever it's still installed, independent of active
+        // state — the OS can disable it on timeout/user-input and we must recover
+        // even if this arrives while inactive but before teardown runs.
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+            return Unmanaged.passUnretained(event)
+        }
+
         guard viewModel.isActive else {
             return Unmanaged.passUnretained(event)
         }
 
         switch type {
-        case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            if let eventTap {
-                CGEvent.tapEnable(tap: eventTap, enable: true)
-            }
-            return Unmanaged.passUnretained(event)
         case .leftMouseDown:
             viewModel.saveCurrentGrid()
-            dismissOverlay()
+            // Defer teardown: dismissOverlay() invalidates this very event tap, so
+            // running it synchronously tears down the mach port from inside its own
+            // CGEventTapCallBack. Hop to the next main-runloop turn so the callback
+            // fully unwinds first.
+            DispatchQueue.main.async { [weak self] in self?.dismissOverlay() }
             return nil
         case .leftMouseUp,
              .leftMouseDragged,
@@ -368,7 +377,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 _ = viewModel.handleKeyDown(keyEvent)
 
                 if !viewModel.isActive {
-                    dismissOverlay()
+                    // Same reason as .leftMouseDown: defer teardown out of the tap callback.
+                    DispatchQueue.main.async { [weak self] in self?.dismissOverlay() }
                 } else {
                     syncOverlayToCursor()
                 }

@@ -268,7 +268,9 @@ struct SettingsView: View {
     @State private var keyMonitor: Any?
     @FocusState private var isFilenameFieldFocused: Bool
 
-    var onHotkeyChanged: ((UInt32, UInt32) -> Void)?
+    /// Returns whether the new hotkey was successfully registered, so the
+    /// recorder can revert to the previous binding on failure.
+    var onHotkeyChanged: ((UInt32, UInt32) -> Bool)?
 
     var body: some View {
         ScrollView {
@@ -809,8 +811,12 @@ struct SettingsView: View {
             }
 
             let mods = AppSettings.carbonModifiers(from: event.modifierFlags)
-            // Require at least one modifier key
-            guard mods != 0 else { return nil }
+            // Require at least one modifier key, and a real (mappable) key —
+            // reject pure-modifier keycodes that can't be bound meaningfully.
+            guard mods != 0, AppSettings.isKnownKeyCode(UInt32(event.keyCode)) else {
+                NSSound.beep()
+                return nil
+            }
 
             hotkeyKeyCode = UInt32(event.keyCode)
             hotkeyModifiers = mods
@@ -875,10 +881,26 @@ struct SettingsView: View {
 
     private func applyHotkey() {
         let settings = AppSettings.shared
+        // Remember the previous binding so we can revert if registration fails
+        // (e.g. the chosen combo is already claimed system-wide).
+        let previousKeyCode = settings.hotkeyKeyCode
+        let previousModifiers = settings.hotkeyModifiers
+
         settings.hotkeyKeyCode = hotkeyKeyCode
         settings.hotkeyModifiers = hotkeyModifiers
+
+        let registered = onHotkeyChanged?(hotkeyKeyCode, hotkeyModifiers) ?? true
+        if !registered {
+            // Roll back to the last working binding and notify the user.
+            settings.hotkeyKeyCode = previousKeyCode
+            settings.hotkeyModifiers = previousModifiers
+            hotkeyKeyCode = previousKeyCode
+            hotkeyModifiers = previousModifiers
+            _ = onHotkeyChanged?(previousKeyCode, previousModifiers)
+            NSSound.beep()
+        }
+
         hotkeyDisplayString = settings.hotkeyDisplayString
-        onHotkeyChanged?(hotkeyKeyCode, hotkeyModifiers)
     }
 
     private func updateFilenamePreview() {

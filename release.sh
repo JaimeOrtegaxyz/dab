@@ -48,7 +48,7 @@ SIG="dist/dab-${VERSION}.sig.txt"
 #    embedded, rpath patched, and ad-hoc dev signature applied (we
 #    overwrite that with Developer ID below).
 echo "==> Building dab.app via build.sh"
-./build.sh
+VERSION="${VERSION}" ./build.sh
 
 if [[ ! -x "${SPARKLE_BIN}/sign_update" ]]; then
     echo "Sparkle's sign_update tool not found at ${SPARKLE_BIN}/sign_update."

@@ -83,23 +83,33 @@ enum SVGExporter {
     @discardableResult
     static func save(grid: GridState, to directory: URL, filenameFormat: String = "dab_{date}_{time}") -> URL? {
         let filename = buildFilename(from: filenameFormat, gridSize: grid.size)
-        let url = directory.appendingPathComponent(filename)
-
         let svg = generateSVG(from: grid)
 
+        let didAccess = directory.startAccessingSecurityScopedResource()
+        defer { if didAccess { directory.stopAccessingSecurityScopedResource() } }
+
+        // Avoid silently overwriting an earlier export written within the same
+        // second (the default filename template is second-resolution): append a
+        // numeric suffix until we find a free path.
+        let base = (filename as NSString).deletingPathExtension
+        let ext = (filename as NSString).pathExtension
+        var url = directory.appendingPathComponent(filename)
+        var counter = 1
+        while FileManager.default.fileExists(atPath: url.path) {
+            let candidate = ext.isEmpty ? "\(base)-\(counter)" : "\(base)-\(counter).\(ext)"
+            url = directory.appendingPathComponent(candidate)
+            counter += 1
+        }
+
         do {
-            _ = directory.startAccessingSecurityScopedResource()
-            defer { directory.stopAccessingSecurityScopedResource() }
             try svg.write(to: url, atomically: true, encoding: .utf8)
             return url
         } catch {
-            do {
-                try svg.write(to: url, atomically: true, encoding: .utf8)
-                return url
-            } catch {
-                print("Failed to save SVG: \(error)")
-                return nil
-            }
+            // The retry that used to live here re-ran the identical write with
+            // the security scope already released, so it could never recover and
+            // only obscured the real error. Surface the original failure instead.
+            print("Failed to save SVG: \(error)")
+            return nil
         }
     }
 }

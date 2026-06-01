@@ -5,12 +5,17 @@ final class AppSettings {
     static let shared = AppSettings()
 
     var gridSize: Int {
-        get { UserDefaults.standard.object(forKey: "gridSize") as? Int ?? 16 }
+        // Clamp on read: gridSize is used as a divisor in cell-size math across
+        // several files, so a 0/negative stored value (corruption or external
+        // tampering) would yield inf/NaN. Mirror the UI stepper's 4...32 range.
+        get { min(32, max(4, UserDefaults.standard.object(forKey: "gridSize") as? Int ?? 16)) }
         set { UserDefaults.standard.set(newValue, forKey: "gridSize") }
     }
 
     var viewportSize: CGFloat {
-        get { CGFloat(UserDefaults.standard.object(forKey: "viewportSize") as? Double ?? 200.0) }
+        // Clamp on read to the UI's supported range so an out-of-range stored
+        // value can't produce a degenerate/negative-size overlay window.
+        get { CGFloat(min(600, max(60, UserDefaults.standard.object(forKey: "viewportSize") as? Double ?? 200.0))) }
         set { UserDefaults.standard.set(Double(newValue), forKey: "viewportSize") }
     }
 
@@ -107,12 +112,25 @@ final class AppSettings {
             if let bookmark = UserDefaults.standard.data(forKey: "saveDirectoryBookmark") {
                 var isStale = false
                 if let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) {
-                    if !isStale {
-                        return url
+                    // A resolved-but-stale bookmark still points at a valid URL
+                    // (common after OS updates or the directory moving). Regenerate
+                    // and persist a fresh bookmark so the chosen directory doesn't
+                    // silently revert to Desktop on a later launch.
+                    if isStale {
+                        let didAccess = url.startAccessingSecurityScopedResource()
+                        if let refreshed = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+                            UserDefaults.standard.set(refreshed, forKey: "saveDirectoryBookmark")
+                        }
+                        if didAccess { url.stopAccessingSecurityScopedResource() }
                     }
+                    return url
                 }
             }
-            return FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
+            // Only reached when there is no bookmark or it fails to resolve entirely.
+            // homeDirectoryForCurrentUser is non-optional and always available, so
+            // it removes the crash path on systems where the desktop URL list is empty.
+            return FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+                ?? FileManager.default.homeDirectoryForCurrentUser
         }
         set {
             if let bookmark = try? newValue.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
@@ -162,6 +180,13 @@ final class AppSettings {
             123: "Left", 124: "Right", 125: "Down", 126: "Up",
         ]
         return map[keyCode] ?? "Key\(keyCode)"
+    }
+
+    /// Whether `keyCode` maps to a known, bindable key. Used by the hotkey
+    /// recorder to reject pure-modifier or otherwise unmappable keycodes before
+    /// committing a binding the user couldn't read back or rely on.
+    static func isKnownKeyCode(_ keyCode: UInt32) -> Bool {
+        keyCodeToString(keyCode) != "Key\(keyCode)"
     }
 
     /// Converts NSEvent modifier flags to Carbon modifier mask for RegisterEventHotKey

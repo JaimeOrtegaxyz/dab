@@ -10,6 +10,17 @@ FRAMEWORKS="${CONTENTS}/Frameworks"
 SOURCE_RESOURCES="dab/Resources"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-B6263C6F33FB6C841AB4CE6026F1B2B24768B222}"
 ENTITLEMENTS="dab.entitlements"
+# release.sh passes the real version via the environment; standalone dev builds
+# get a placeholder so the bundle is never left with a stale hardcoded version.
+VERSION="${VERSION:-0.0.0-dev}"
+
+# Reject a malformed version early. PlistBuddy re-parses the value by whitespace,
+# so a stray space (e.g. "1.0 beta") would silently corrupt the stamped plist;
+# fail loudly instead of sealing a broken Info.plist into the signed bundle.
+if [[ ! "${VERSION}" =~ ^[0-9A-Za-z.+-]+$ ]]; then
+    echo "Invalid VERSION '${VERSION}': only [0-9A-Za-z.+-] are allowed."
+    exit 1
+fi
 
 echo "Building ${APP_NAME} via SwiftPM..."
 swift build -c release
@@ -34,6 +45,15 @@ mkdir -p "${MACOS}" "${RESOURCES}" "${FRAMEWORKS}"
 
 cp "${BINARY_PATH}" "${MACOS}/${APP_NAME}"
 cp "dab/App/Info.plist" "${CONTENTS}/Info.plist"
+
+# Stamp the build version into the copied plist. Must happen before codesign
+# (below) so the signature seals the edited plist, and before any DMG/notarize
+# steps in release.sh — otherwise Sparkle compares the appcast's version against
+# a stale CFBundleVersion and either loops or never sees the update as installed.
+echo "Stamping version ${VERSION} into Info.plist..."
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString '${VERSION}'" \
+    -c "Set :CFBundleVersion '${VERSION}'" \
+    "${CONTENTS}/Info.plist"
 
 if [[ -d "${SOURCE_RESOURCES}" ]]; then
     find "${SOURCE_RESOURCES}" -type f \

@@ -7,7 +7,7 @@ final class StatusBarController {
     private var settingsWindow: NSWindow?
 
     var onActivate: (() -> Void)?
-    var onHotkeyChanged: ((UInt32, UInt32) -> Void)?
+    var onHotkeyChanged: ((UInt32, UInt32) -> Bool)?
     var updaterController: SPUStandardUpdaterController?
 
     func setup() {
