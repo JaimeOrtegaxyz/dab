@@ -12,8 +12,20 @@ struct PixelColor: Codable, Hashable {
     }
 
     init?(hex: String) {
-        let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        var cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "#", with: "")
+
+        // Accept common shorthand and alpha forms: expand 3-digit #RGB to
+        // #RRGGBB, and drop the alpha byte from 8-digit #RRGGBBAA (PixelColor
+        // has no alpha channel).
+        switch cleaned.count {
+        case 3:
+            cleaned = cleaned.map { "\($0)\($0)" }.joined()
+        case 8:
+            cleaned = String(cleaned.prefix(6))
+        default:
+            break
+        }
 
         guard cleaned.count == 6, let value = UInt32(cleaned, radix: 16) else {
             return nil

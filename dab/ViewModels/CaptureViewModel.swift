@@ -1,7 +1,29 @@
 import AppKit
 import Combine
+import os
 
 final class CaptureViewModel: ObservableObject {
+    /// Immutable value-type copy of every piece of state the capture loop
+    /// reads. Built on the main thread on each mutation and published through
+    /// `stateLock`, so `captureFrame()` (running on `captureQueue`) never
+    /// touches the `@Published` properties directly — eliminating the data
+    /// race on `palette`'s copy-on-write storage and the scalar fields.
+    private struct CaptureSnapshot {
+        var gridSize: Int = 16
+        var viewportSize: CGFloat = 200
+        var brightnessThreshold: Float = 0.5
+        var filterMode: FilterMode = .colorMatch
+        var palette: [PaletteSwatch] = PaletteSwatch.defaultPalette
+        var isInverted: Bool = false
+        var horizontalMirrorMode: HorizontalMirrorMode = .none
+        var verticalMirrorMode: VerticalMirrorMode = .none
+        var isRounded: Bool = false
+        var isRandomizing: Bool = false
+        var randomVariationIndex: Int = 0
+    }
+
+    private let stateLock = OSAllocatedUnfairLock(initialState: CaptureSnapshot())
+
     @Published var gridState = GridState(size: 16)
     @Published var gridSize: Int = 16
     @Published var viewportSize: CGFloat = 200
@@ -32,6 +54,7 @@ final class CaptureViewModel: ObservableObject {
         horizontalMirrorMode = settings.horizontalMirrorMode
         verticalMirrorMode = settings.verticalMirrorMode
         randomVariationIndex = settings.lastRandomVariationIndex
+        publishSnapshot()
     }
 
     func activate() {
@@ -42,7 +65,28 @@ final class CaptureViewModel: ObservableObject {
         // it on capture start, even if the last session ended inside it.
         isRandomizing = false
         syncCurrentGridPresentation()
+        publishSnapshot()
         isActive = true
+    }
+
+    /// Copy the current `@Published` state into the lock-protected snapshot.
+    /// Must be called on the main thread after any mutation of the fields the
+    /// capture loop consumes.
+    private func publishSnapshot() {
+        let snapshot = CaptureSnapshot(
+            gridSize: gridSize,
+            viewportSize: viewportSize,
+            brightnessThreshold: brightnessThreshold,
+            filterMode: filterMode,
+            palette: palette,
+            isInverted: isInverted,
+            horizontalMirrorMode: horizontalMirrorMode,
+            verticalMirrorMode: verticalMirrorMode,
+            isRounded: isRounded,
+            isRandomizing: isRandomizing,
+            randomVariationIndex: randomVariationIndex
+        )
+        stateLock.withLock { $0 = snapshot }
     }
 
     func startCapturing() {
@@ -135,6 +179,8 @@ final class CaptureViewModel: ObservableObject {
             return false
         }
 
+        // Any handled key may have mutated capture-loop state; republish.
+        publishSnapshot()
         return true
     }
 
@@ -178,15 +224,19 @@ final class CaptureViewModel: ObservableObject {
 
     private func captureFrame() {
         autoreleasepool {
+            // Read all mutable state from the lock-protected snapshot exactly
+            // once, so the rest of this frame works from a consistent,
+            // thread-safe copy rather than racing the main thread.
+            let snapshot = stateLock.withLock { $0 }
             let currentMouse = ScreenCaptureService.currentMouseLocation()
-            let currentGridSize = gridSize
-            let currentViewportSize = viewportSize
-            let currentThreshold = brightnessThreshold
-            let currentFilterMode = filterMode
-            let currentInverted = isInverted
-            let currentHorizontalMirrorMode = horizontalMirrorMode
-            let currentVerticalMirrorMode = verticalMirrorMode
-            let currentRounded = isRounded
+            let currentGridSize = snapshot.gridSize
+            let currentViewportSize = snapshot.viewportSize
+            let currentThreshold = snapshot.brightnessThreshold
+            let currentFilterMode = snapshot.filterMode
+            let currentInverted = snapshot.isInverted
+            let currentHorizontalMirrorMode = snapshot.horizontalMirrorMode
+            let currentVerticalMirrorMode = snapshot.verticalMirrorMode
+            let currentRounded = snapshot.isRounded
 
             // Normalize the palette once. The filter and sampling layers
             // always see this original ordering — that's what produces the
@@ -197,9 +247,9 @@ final class CaptureViewModel: ObservableObject {
             // still gets the swatch the filter chose, but rendering looks
             // that index up in the permuted palette — so the same set of
             // colors ends up painted into different regions of the output.
-            let baseNormalizedPalette = GridFilters.normalize(palette: palette)
-            let renderPalette = isRandomizing
-                ? PaletteVariator.variation(of: baseNormalizedPalette, seed: randomVariationIndex)
+            let baseNormalizedPalette = GridFilters.normalize(palette: snapshot.palette)
+            let renderPalette = snapshot.isRandomizing
+                ? PaletteVariator.variation(of: baseNormalizedPalette, seed: snapshot.randomVariationIndex)
                 : baseNormalizedPalette
 
             let colors: [PixelColor]

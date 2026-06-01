@@ -16,6 +16,11 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
     private let controlQueue = DispatchQueue(label: "com.dab.screencapture.control")
     private let outputQueue = DispatchQueue(label: "com.dab.screencapture.output", qos: .userInteractive)
     private let frameLock = NSLock()
+    // Guards the current stream identity + capture geometry so the output
+    // callback can read them without taking controlQueue.sync — controlQueue is
+    // held for the full duration of the blocking start/stop semaphore waits, so
+    // reading through it would stall frame intake behind stream lifecycle.
+    private let stateLock = NSLock()
 
     private var shareableContent: SCShareableContent?
     private var lastShareableContentRefresh: Date = .distantPast
@@ -118,12 +123,10 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
             return
         }
 
-        let state = controlQueue.sync { () -> (screenFrame: CGRect, pixelsPerPointX: CGFloat, pixelsPerPointY: CGFloat)? in
-            guard stream === currentStream else {
-                return nil
-            }
-            return currentCaptureState
-        }
+        stateLock.lock()
+        let state: (screenFrame: CGRect, pixelsPerPointX: CGFloat, pixelsPerPointY: CGFloat)? =
+            (stream === currentStream) ? currentCaptureState : nil
+        stateLock.unlock()
 
         guard let state else {
             return
@@ -147,9 +150,11 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
                 return
             }
 
+            self.stateLock.lock()
             self.currentStream = nil
-            self.currentDisplayID = nil
             self.currentCaptureState = nil
+            self.stateLock.unlock()
+            self.currentDisplayID = nil
             self.clearLatestFrame()
         }
     }
@@ -161,13 +166,40 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
 
         controlQueue.sync {
             cancelPendingStop()
-            let needsRestart = currentStream == nil || currentDisplayID != displayID
+            // Also restart when the display's resolution/scale changed while the
+            // same displayID stayed current — otherwise cropRect keeps using stale
+            // pixelsPerPoint/screenFrame and samples the wrong region.
+            let needsRestart = currentStream == nil
+                || currentDisplayID != displayID
+                || captureGeometryChanged(for: displayID)
             guard needsRestart else {
                 return
             }
 
             startStream(for: displayID)
         }
+    }
+
+    /// Whether the live geometry of `displayID` no longer matches the stored
+    /// capture state (resolution or scale-factor change). Runs on controlQueue.
+    private func captureGeometryChanged(for displayID: CGDirectDisplayID) -> Bool {
+        guard let state = currentCaptureState else { return true }
+        guard let frame = Self.screenFrame(for: displayID), frame.width > 0, frame.height > 0 else {
+            // Can't determine current geometry; don't thrash the stream.
+            return false
+        }
+        let width = max(CGFloat(CGDisplayPixelsWide(displayID)), 1)
+        let height = max(CGFloat(CGDisplayPixelsHigh(displayID)), 1)
+        let pointEpsilon: CGFloat = 0.5
+        if abs(state.screenFrame.minX - frame.minX) > pointEpsilon
+            || abs(state.screenFrame.minY - frame.minY) > pointEpsilon
+            || abs(state.screenFrame.width - frame.width) > pointEpsilon
+            || abs(state.screenFrame.height - frame.height) > pointEpsilon {
+            return true
+        }
+        let scaleEpsilon: CGFloat = 0.001
+        return abs(state.pixelsPerPointX - width / frame.width) > scaleEpsilon
+            || abs(state.pixelsPerPointY - height / frame.height) > scaleEpsilon
     }
 
     private func startStream(for displayID: CGDirectDisplayID) {
@@ -245,26 +277,33 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
             return
         }
 
-        currentStream = stream
-        currentDisplayID = displayID
-        currentCaptureState = (
+        let captureState = (
             screenFrame: frame,
             pixelsPerPointX: width / frame.width,
             pixelsPerPointY: height / frame.height
         )
+        stateLock.lock()
+        currentStream = stream
+        currentCaptureState = captureState
+        stateLock.unlock()
+        currentDisplayID = displayID
     }
 
     private func stopCurrentStream() {
         guard let stream = currentStream else {
-            currentDisplayID = nil
+            stateLock.lock()
             currentCaptureState = nil
+            stateLock.unlock()
+            currentDisplayID = nil
             clearLatestFrame()
             return
         }
 
+        stateLock.lock()
         currentStream = nil
-        currentDisplayID = nil
         currentCaptureState = nil
+        stateLock.unlock()
+        currentDisplayID = nil
         clearLatestFrame()
 
         do {
