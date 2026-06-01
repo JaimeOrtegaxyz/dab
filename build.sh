@@ -8,8 +8,34 @@ MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
 FRAMEWORKS="${CONTENTS}/Frameworks"
 SOURCE_RESOURCES="dab/Resources"
-SIGNING_IDENTITY="${SIGNING_IDENTITY:-B6263C6F33FB6C841AB4CE6026F1B2B24768B222}"
 ENTITLEMENTS="dab.entitlements"
+
+# Dev-build signing identity. TCC (Accessibility, Screen Recording) keys its
+# grant to bundle ID + the *signing identity*, so a STABLE identity makes the
+# grant survive rebuilds. Resolution order, first hit wins:
+#   1. $SIGNING_IDENTITY env override (explicit).
+#   2. a self-signed "dab Dev" cert -> portable: recreate by name on each Mac
+#      (Keychain Access > Certificate Assistant > Create a Certificate,
+#       name "dab Dev", type Code Signing, self-signed).
+#   3. the machine's "Apple Development" identity -> stable per-Mac, ships with Xcode.
+#   4. ad-hoc "-" -> builds fine, but Screen Recording must be re-granted each rebuild.
+# (Was a hardcoded cert SHA-1, which only existed on one Mac and hard-failed elsewhere.)
+DEV_SIGN_NAME="${DEV_SIGN_NAME:-dab Dev}"
+
+resolve_signing_identity() {
+    if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
+        printf '%s' "${SIGNING_IDENTITY}"
+        return
+    fi
+    local list hash
+    list="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+    hash="$(printf '%s\n' "${list}" | grep -F "\"${DEV_SIGN_NAME}\"" | head -1 | awk '{print $2}' || true)"
+    if [[ -n "${hash}" ]]; then printf '%s' "${hash}"; return; fi
+    hash="$(printf '%s\n' "${list}" | grep -F 'Apple Development:' | head -1 | awk '{print $2}' || true)"
+    if [[ -n "${hash}" ]]; then printf '%s' "${hash}"; return; fi
+    printf '%s' '-'
+}
+SIGNING_IDENTITY="$(resolve_signing_identity)"
 # release.sh passes the real version via the environment; standalone dev builds
 # get a placeholder so the bundle is never left with a stale hardcoded version.
 VERSION="${VERSION:-0.0.0-dev}"
@@ -78,7 +104,14 @@ install_name_tool -add_rpath "@executable_path/../Frameworks" "${MACOS}/${APP_NA
 # Sign the inner framework first (with --deep so its nested bundles —
 # Updater.app, Autoupdate.app, XPCServices — all get signed too), then
 # sign the outer app. Signing has to walk inner-out.
-echo "Codesigning with identity: ${SIGNING_IDENTITY}"
+if [[ "${SIGNING_IDENTITY}" == "-" ]]; then
+    echo "Codesigning ad-hoc (no 'dab Dev' or Apple Development cert found)."
+    echo "  -> Screen Recording / Accessibility must be re-granted after each rebuild."
+    echo "  -> For a stable grant, create a self-signed 'dab Dev' Code Signing cert"
+    echo "     in Keychain Access (Certificate Assistant > Create a Certificate)."
+else
+    echo "Codesigning with identity: ${SIGNING_IDENTITY}"
+fi
 codesign --force --deep --sign "${SIGNING_IDENTITY}" "${FRAMEWORKS}/Sparkle.framework"
 codesign --force --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" "${APP_BUNDLE}"
 
