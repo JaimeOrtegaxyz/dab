@@ -5,6 +5,29 @@ enum GridCell: Hashable {
     case transparent
 }
 
+/// How the grid is drawn. Cycled with the `r` key: squares → dots → blobs.
+enum RenderMode: Int, CaseIterable {
+    /// Crisp pixels.
+    case squares
+    /// Rounded blobs over a single dominant-color background grout.
+    case dots
+    /// Rounded blobs over a palette-order grout (lowest palette index wins gaps).
+    case blobs
+
+    var next: RenderMode {
+        let all = RenderMode.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+
+    var displayName: String {
+        switch self {
+        case .squares: return "Squares"
+        case .dots: return "Dots"
+        case .blobs: return "Blobs"
+        }
+    }
+}
+
 struct GridState {
     let size: Int
     var palette: [PaletteSwatch]
@@ -12,7 +35,7 @@ struct GridState {
     var isInverted: Bool = false
     var horizontalMirrorMode: HorizontalMirrorMode = .none
     var verticalMirrorMode: VerticalMirrorMode = .none
-    var isRounded: Bool = false
+    var renderMode: RenderMode = .squares
 
     init(size: Int, palette: [PaletteSwatch] = PaletteSwatch.defaultPalette) {
         self.size = size
@@ -79,6 +102,22 @@ struct GridState {
             }
         }
         return indices.sorted()
+    }
+
+    /// The most-used effective palette index — the "background" color for Dots
+    /// mode. Ties break toward the lowest index for determinism.
+    func dominantPaletteIndex() -> Int? {
+        var counts: [Int: Int] = [:]
+        for row in 0..<size {
+            for col in 0..<size {
+                if let index = effectivePaletteIndex(row: row, col: col) {
+                    counts[index, default: 0] += 1
+                }
+            }
+        }
+        return counts.max { lhs, rhs in
+            lhs.value != rhs.value ? lhs.value < rhs.value : lhs.key > rhs.key
+        }?.key
     }
 
     private func inverted(_ cell: GridCell) -> GridCell {

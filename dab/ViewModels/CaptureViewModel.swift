@@ -17,7 +17,7 @@ final class CaptureViewModel: ObservableObject {
         var isInverted: Bool = false
         var horizontalMirrorMode: HorizontalMirrorMode = .none
         var verticalMirrorMode: VerticalMirrorMode = .none
-        var isRounded: Bool = false
+        var renderMode: RenderMode = .squares
         var isRandomizing: Bool = false
         var randomVariationIndex: Int = 0
     }
@@ -33,7 +33,7 @@ final class CaptureViewModel: ObservableObject {
     @Published var isInverted: Bool = false
     @Published var horizontalMirrorMode: HorizontalMirrorMode = .none
     @Published var verticalMirrorMode: VerticalMirrorMode = .none
-    @Published var isRounded: Bool = false
+    @Published var renderMode: RenderMode = .squares
     @Published var isActive: Bool = false
     @Published var lastSavedURL: URL?
     @Published var isRandomizing: Bool = false
@@ -60,7 +60,7 @@ final class CaptureViewModel: ObservableObject {
     func activate() {
         loadSettings()
         isInverted = false
-        isRounded = false
+        renderMode = .squares
         // The randomizer is a deliberate, modal action — never auto-enter
         // it on capture start, even if the last session ended inside it.
         isRandomizing = false
@@ -82,7 +82,7 @@ final class CaptureViewModel: ObservableObject {
             isInverted: isInverted,
             horizontalMirrorMode: horizontalMirrorMode,
             verticalMirrorMode: verticalMirrorMode,
-            isRounded: isRounded,
+            renderMode: renderMode,
             isRandomizing: isRandomizing,
             randomVariationIndex: randomVariationIndex
         )
@@ -144,7 +144,7 @@ final class CaptureViewModel: ObservableObject {
             verticalMirrorMode = verticalMirrorMode.next
             syncCurrentGridPresentation()
         case 15:
-            isRounded.toggle()
+            renderMode = renderMode.next
             syncCurrentGridPresentation()
         case 18:
             filterMode = .colorMatch
@@ -200,7 +200,7 @@ final class CaptureViewModel: ObservableObject {
         grid.isInverted = isInverted
         grid.horizontalMirrorMode = horizontalMirrorMode
         grid.verticalMirrorMode = verticalMirrorMode
-        grid.isRounded = isRounded
+        grid.renderMode = renderMode
         lastSavedURL = SVGExporter.save(grid: grid, to: settings.saveDirectory, filenameFormat: settings.filenameFormat)
         if let url = lastSavedURL {
             print("Saved: \(url.path)")
@@ -236,7 +236,7 @@ final class CaptureViewModel: ObservableObject {
             let currentInverted = snapshot.isInverted
             let currentHorizontalMirrorMode = snapshot.horizontalMirrorMode
             let currentVerticalMirrorMode = snapshot.verticalMirrorMode
-            let currentRounded = snapshot.isRounded
+            let currentRenderMode = snapshot.renderMode
 
             // Normalize the palette once. The filter and sampling layers
             // always see this original ordering — that's what produces the
@@ -309,7 +309,7 @@ final class CaptureViewModel: ObservableObject {
             newGrid.isInverted = currentInverted
             newGrid.horizontalMirrorMode = currentHorizontalMirrorMode
             newGrid.verticalMirrorMode = currentVerticalMirrorMode
-            newGrid.isRounded = currentRounded
+            newGrid.renderMode = currentRenderMode
 
             DispatchQueue.main.async { [weak self] in
                 self?.gridState = newGrid
@@ -322,6 +322,6 @@ final class CaptureViewModel: ObservableObject {
         gridState.isInverted = isInverted
         gridState.horizontalMirrorMode = horizontalMirrorMode
         gridState.verticalMirrorMode = verticalMirrorMode
-        gridState.isRounded = isRounded
+        gridState.renderMode = renderMode
     }
 }

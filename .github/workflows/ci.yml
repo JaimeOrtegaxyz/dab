@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Swift version
+        run: swift --version
+      - name: Build (debug)
+        run: swift build
+      # No test step yet: dab has no test target. Adding `swift test` requires
+      # splitting the pure logic (RoundedGridPath, GridState, ...) into a small
+      # `dabCore` library target the tests can import — see RELEASE_GUIDE.md.

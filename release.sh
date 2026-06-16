@@ -97,6 +97,12 @@ create-dmg \
     "${DMG}" \
     "${APP_BUNDLE}"
 
+# 4b. Codesign the DMG itself (Developer ID + timestamp). Notarization works
+#     without this, but a signed DMG passes the stricter primary-signature
+#     Gatekeeper assessment and makes tampering of the disk image detectable.
+echo "==> Codesigning the DMG"
+codesign --force --timestamp --sign "${SIGN_ID}" "${DMG}"
+
 # 5. Submit the DMG to Apple's notary service and wait for the verdict.
 echo "==> Submitting DMG to Apple notary service (this can take 1-15 min)"
 xcrun notarytool submit "${DMG}" \
@@ -108,6 +114,7 @@ xcrun notarytool submit "${DMG}" \
 #    inherits the ticket via the disk image's notarization metadata).
 echo "==> Stapling notarization ticket to DMG"
 xcrun stapler staple "${DMG}"
+xcrun stapler validate "${DMG}"
 
 # 7. Sign the DMG with Sparkle's EdDSA private key. The signature line
 #    is what goes into the appcast's <enclosure> tag. This is a
@@ -117,6 +124,24 @@ xcrun stapler staple "${DMG}"
 #    installed app.
 echo "==> Signing DMG with Sparkle EdDSA key"
 "${SPARKLE_BIN}/sign_update" "${DMG}" > "${SIG}"
+
+# 7b. Verify the Sparkle signature and that the declared length matches the
+#     actual DMG bytes. A length/signature mismatch is the #1 cause of "update
+#     available but installation fails" — fail loudly here rather than discover
+#     it after users are already pulling a broken appcast.
+ED_SIG=$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' "${SIG}")
+DECLARED_LEN=$(sed -n 's/.*length="\([0-9]*\)".*/\1/p' "${SIG}")
+ACTUAL_LEN=$(stat -f %z "${DMG}")
+if [[ -z "${ED_SIG}" ]]; then
+    echo "ERROR: Sparkle signature not found in ${SIG}"
+    exit 1
+fi
+if [[ "${DECLARED_LEN}" != "${ACTUAL_LEN}" ]]; then
+    echo "ERROR: Sparkle length ${DECLARED_LEN} does not match actual DMG size ${ACTUAL_LEN}"
+    exit 1
+fi
+"${SPARKLE_BIN}/sign_update" --verify "${DMG}" "${ED_SIG}"
+echo "==> Sparkle signature verified (length ${ACTUAL_LEN})"
 
 # 8. Final Gatekeeper sanity check on the inner app (mounted DMGs
 #    inherit the staple, so spctl on the .app inside should accept).
