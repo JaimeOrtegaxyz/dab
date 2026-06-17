@@ -146,13 +146,16 @@ final class CaptureViewModel: ObservableObject {
         case 15:
             renderMode = renderMode.next
             syncCurrentGridPresentation()
+        // Number keys 1-4 select a filter directly, in FilterMode.allCases order.
+        // (Outline was previously on keycode 26 = '7', a leftover from when there
+        // were more filters; it's now '4' so the keys are contiguous.)
         case 18:
             filterMode = .colorMatch
         case 19:
             filterMode = .threshold
         case 20:
             filterMode = .halftone
-        case 26:
+        case 21:
             filterMode = .edgeDetect
         case 6:
             // Z — toggle the palette randomizer. Entering re-applies the

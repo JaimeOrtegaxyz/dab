@@ -62,7 +62,10 @@ final class StatusBarController {
             defer: false
         )
         window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
+        // Not movable by background: it would hijack drag-to-reorder on the
+        // palette tiles (the window would move instead of the swatch). The
+        // window is still movable from its title-bar region.
+        window.isMovableByWindowBackground = false
         window.title = "dab Settings"
         // Force light appearance so the title text renders dark on the yellow case
         // (and so any system controls behind the SwiftUI view stay light-themed).
