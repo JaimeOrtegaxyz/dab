@@ -20,14 +20,20 @@ final class AppSettings {
     }
 
     var resizeStep: CGFloat {
-        get { CGFloat(UserDefaults.standard.object(forKey: "resizeStep") as? Double ?? 10.0) }
+        // Clamp on read to the UI stepper's 5...50 range. resizeStep is used as a
+        // multiplier for viewport key adjustments, so a 0/negative stored value
+        // (corruption or external tampering) would make the resize keys no-op or
+        // run backwards.
+        get { CGFloat(min(50, max(5, UserDefaults.standard.object(forKey: "resizeStep") as? Double ?? 10.0))) }
         set { UserDefaults.standard.set(Double(newValue), forKey: "resizeStep") }
     }
 
     var brightnessThreshold: Float {
+        // Clamp on read to the UI slider's 0...1 range so an out-of-range stored
+        // value can't over-bias the threshold/halftone bands.
         get {
             if let number = UserDefaults.standard.object(forKey: "brightnessThreshold") as? NSNumber {
-                return number.floatValue
+                return min(1, max(0, number.floatValue))
             }
             return 0.5
         }
@@ -145,7 +151,7 @@ final class AppSettings {
     }
 
     var hotkeyModifiers: UInt32 {
-        get { UInt32(UserDefaults.standard.object(forKey: "hotkeyModifiers") as? Int ?? 0x0108) } // Cmd+Shift
+        get { UInt32(UserDefaults.standard.object(forKey: "hotkeyModifiers") as? Int ?? 0x0300) } // Cmd+Shift (cmdKey 0x100 | shiftKey 0x200)
         set { UserDefaults.standard.set(Int(newValue), forKey: "hotkeyModifiers") }
     }
 
