@@ -99,4 +99,55 @@ struct PaletteSwatch: Codable, Hashable, Identifiable {
         PaletteSwatch(color: PixelColor(hex: "#000000")!),
         PaletteSwatch(color: PixelColor(hex: "#000000")!, isTransparent: true),
     ]
+
+    /// Builds an opaque palette from hex strings (dev-authored, so force-unwrap
+    /// is fine — same as the literals above). Index 0 is the Blobs grout.
+    private static func hexes(_ values: String...) -> [PaletteSwatch] {
+        values.map { PaletteSwatch(color: PixelColor(hex: $0)!) }
+    }
+
+    /// The curated preset shelf. Names lean playful over descriptive; palettes
+    /// span deliberately different moods (bold primaries, arcade neon, glossy
+    /// aero, DMG greens, a brown-anchored candy set, and an ink stencil). #1 is
+    /// always the grout, so grout choice is part of each palette's look.
+    static let presets: [PalettePreset] = [
+        // The colorful house set (still the app default) — colored dots on black,
+        // exactly a Lite-Brite peg board.
+        PalettePreset(name: "lite brite", swatches: defaultPalette),
+        // Full 8-swatch neon cabinet on black.
+        PalettePreset(name: "insert coin", swatches: hexes(
+            "#000000", "#FF004D", "#FF8A00", "#FFE400",
+            "#14FF72", "#00D9FF", "#7A5CFF", "#FF3EC9"
+        )),
+        // Solid chocolate grout surrounded by candy pops (not earthy neighbours).
+        PalettePreset(name: "choco taco", swatches: hexes(
+            "#5C3A21", "#FFD23F", "#FF5DA2", "#12D8B0", "#7B61FF"
+        )),
+        // Ink + one see-through swatch: silhouettes onto the desktop.
+        PalettePreset(name: "ghosted", swatches: blackTransparentPalette),
+    ]
+}
+
+/// A named palette on the presets shelf.
+struct PalettePreset: Identifiable {
+    var name: String
+    var swatches: [PaletteSwatch]
+    var id: String { name }
+}
+
+/// A palette the user saved. Same shape as a built-in `PalettePreset`, but
+/// `Codable` because these are persisted to `UserDefaults` (via
+/// `AppSettings.savedPalettes`) rather than declared in code. `id` is a stable
+/// UUID so the presets dropdown's `ForEach` survives renames; matching against
+/// the live palette is by swatches, and the chip shows `name`.
+struct SavedPalette: Codable, Identifiable, Hashable {
+    var id: UUID
+    var name: String
+    var swatches: [PaletteSwatch]
+
+    init(id: UUID = UUID(), name: String, swatches: [PaletteSwatch]) {
+        self.id = id
+        self.name = name
+        self.swatches = swatches
+    }
 }

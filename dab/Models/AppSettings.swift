@@ -51,6 +51,17 @@ final class AppSettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "filterMode") }
     }
 
+    /// The render mode the overlay starts in; the `r` key still cycles live
+    /// from there. Falls back to `.squares` for missing/corrupt raw values.
+    var defaultRenderMode: RenderMode {
+        get {
+            let raw = UserDefaults.standard.object(forKey: "defaultRenderMode") as? Int
+                ?? RenderMode.squares.rawValue
+            return RenderMode(rawValue: raw) ?? .squares
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "defaultRenderMode") }
+    }
+
     /// The most-recent palette-randomizer seed. Persisted so re-entering the
     /// randomizer in a future session resumes on the variation the user was
     /// last looking at (whether they exited or accepted it via a save).
@@ -77,6 +88,24 @@ final class AppSettings {
             }
 
             UserDefaults.standard.set(data, forKey: "paletteSwatches")
+        }
+    }
+
+    /// User-saved palettes, shown in the settings presets dropdown under
+    /// "yours". Distinct from the active `palette` (which always persists on its
+    /// own) — these are named bookmarks the user can return to after editing.
+    var savedPalettes: [SavedPalette] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: "savedPalettes"),
+                  let decoded = try? JSONDecoder().decode([SavedPalette].self, from: data) else {
+                return []
+            }
+
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            UserDefaults.standard.set(data, forKey: "savedPalettes")
         }
     }
 

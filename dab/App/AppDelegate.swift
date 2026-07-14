@@ -40,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = AppSettings.shared
         hotkeyManager.register(keyCode: settings.hotkeyKeyCode, modifiers: settings.hotkeyModifiers)
 
+        // Register dab as a login item on first run so it starts with the user's
+        // session; thereafter the Settings toggle owns this choice.
+        LoginItemService.applyDefaultIfNeeded()
+
         let currentPID = ProcessInfo.processInfo.processIdentifier
         if let frontmostApp = NSWorkspace.shared.frontmostApplication, frontmostApp.processIdentifier != currentPID {
             lastExternalApplication = frontmostApp

@@ -36,6 +36,28 @@ enum GridFilters {
         return trimmed.isEmpty ? PaletteSwatch.defaultPalette : trimmed
     }
 
+    /// Builds the Color Match vote palette: the non-transparent swatch colors
+    /// plus the map from vote index back to full-palette index. Shared by the
+    /// live capture path and the settings preview so their votes cannot drift.
+    static func votePalette(from palette: [PaletteSwatch]) -> (colors: [PixelColor], toFullIndex: [Int]) {
+        var colors: [PixelColor] = []
+        var toFullIndex: [Int] = []
+        for (index, swatch) in palette.enumerated() where !swatch.isTransparent {
+            colors.append(swatch.color)
+            toFullIndex.append(index)
+        }
+        return (colors, toFullIndex)
+    }
+
+    /// Lifts sampler votes (indices into the vote palette) into full-palette
+    /// indices for `apply(_:colors:gridSize:palette:threshold:paletteVotes:)`.
+    static func mapVotes(_ votes: [Int?], toFullIndex: [Int]) -> [Int?] {
+        votes.map { vote in
+            guard let vote, vote >= 0, vote < toFullIndex.count else { return nil }
+            return toFullIndex[vote]
+        }
+    }
+
     private static func clamped(_ value: Float, min minValue: Float = 0, max maxValue: Float = 1) -> Float {
         Swift.min(maxValue, Swift.max(minValue, value))
     }

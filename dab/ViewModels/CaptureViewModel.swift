@@ -60,7 +60,7 @@ final class CaptureViewModel: ObservableObject {
     func activate() {
         loadSettings()
         isInverted = false
-        renderMode = .squares
+        renderMode = AppSettings.shared.defaultRenderMode
         // The randomizer is a deliberate, modal action — never auto-enter
         // it on capture start, even if the last session ended inside it.
         isRandomizing = false
@@ -259,14 +259,9 @@ final class CaptureViewModel: ObservableObject {
             let paletteVotes: [Int?]?
 
             if currentFilterMode == .colorMatch {
-                // Build the vote palette: non-transparent swatches plus the
-                // map back to their indices in the full normalized palette.
-                var voteColors: [PixelColor] = []
-                var voteToFullIndex: [Int] = []
-                for (index, swatch) in baseNormalizedPalette.enumerated() where !swatch.isTransparent {
-                    voteColors.append(swatch.color)
-                    voteToFullIndex.append(index)
-                }
+                // Vote palette via the shared helper (also used by the
+                // settings preview, so the two paths cannot drift).
+                let (voteColors, voteToFullIndex) = GridFilters.votePalette(from: baseNormalizedPalette)
 
                 if voteColors.isEmpty {
                     // No non-transparent swatches; falls back to average path.
@@ -285,10 +280,7 @@ final class CaptureViewModel: ObservableObject {
                         votePalette: voteColors
                     ) else { return }
                     colors = bundle.colors
-                    paletteVotes = bundle.votes.map { vote in
-                        guard let vote, vote >= 0, vote < voteToFullIndex.count else { return nil }
-                        return voteToFullIndex[vote]
-                    }
+                    paletteVotes = GridFilters.mapVotes(bundle.votes, toFullIndex: voteToFullIndex)
                 }
             } else {
                 guard let averages = captureService.colorGrid(
