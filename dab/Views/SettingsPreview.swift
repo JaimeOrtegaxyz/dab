@@ -15,8 +15,6 @@ struct SettingsPreview: View {
     @Binding var renderMode: RenderMode
     var highlightedPaletteIndex: Int? = nil
 
-    @State private var booted = false
-
     /// Loaded once; a missing asset shows "no signal".
     private static let sampler: PreviewSampler? = PreviewSampler(bundledImageNamed: "sample-shapes")
 
@@ -46,10 +44,6 @@ struct SettingsPreview: View {
                     .offset(x: 12, y: -6)
             }
         }
-        .onAppear {
-            guard !booted else { return }
-            withAnimation(.easeOut(duration: 0.35)) { booted = true }
-        }
     }
 
     // MARK: - LCD
@@ -57,13 +51,9 @@ struct SettingsPreview: View {
     private var lcdModule: some View {
         VStack(spacing: 0) {
             ZStack {
-                // Powered-off screen behind the booting content.
+                // Base screen colour behind the rendered grid.
                 WatchTheme.lcdGreen
-
-                if booted {
-                    screenContent
-                        .transition(.lcdBoot)
-                }
+                screenContent
             }
             .frame(width: lcdSide, height: lcdSide)
             .clipped()
