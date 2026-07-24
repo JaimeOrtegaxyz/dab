@@ -1098,17 +1098,14 @@ struct SettingsView: View {
         )
     }
 
-    /// The palette shelf, in the same order `c` walks it: built-ins, then
-    /// yours, then the single unsaved working slot.
+    /// The palette shelf, in the same order `c` walks it: built-ins and saved
+    /// palettes as one flat list, then the single unsaved working slot as its
+    /// own trailing section. (Built-in vs. yours used to be separate groups,
+    /// but the split carried no information the rows didn't — a palette is a
+    /// palette; only "not committed yet" earns a heading.)
     @ViewBuilder
     private var presetsPanelContent: some View {
-        paletteRows(PaletteLibrary.builtIns)
-
-        let yours = PaletteLibrary.saved
-        if !yours.isEmpty {
-            dropdownGroupLabel("yours")
-            paletteRows(yours)
-        }
+        paletteRows(PaletteLibrary.builtIns + PaletteLibrary.saved)
 
         if let working = PaletteLibrary.unsaved {
             dropdownGroupLabel("unsaved")
@@ -1177,8 +1174,8 @@ struct SettingsView: View {
         }
     }
 
-    /// A silkscreen divider inside a dropdown list — separates the built-in
-    /// presets from the user's saved palettes ("yours").
+    /// A silkscreen divider inside a dropdown list — sets off the unsaved
+    /// working slot from the named palettes above it.
     private func dropdownGroupLabel(_ text: String) -> some View {
         HStack(spacing: 6) {
             Text(text.uppercased())
@@ -1551,7 +1548,7 @@ struct SettingsView: View {
             SilkscreenRule()
             shortcutRow("f", "cycle filter mode")
             SilkscreenRule()
-            shortcutRow("c", "cycle palettes (built-ins, yours, then unsaved)")
+            shortcutRow("c", "cycle palettes in list order (unsaved last)")
             SilkscreenRule()
             shortcutRow("z", "toggle randomizer")
             SilkscreenRule()

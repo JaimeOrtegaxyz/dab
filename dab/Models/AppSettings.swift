@@ -91,9 +91,9 @@ final class AppSettings {
         }
     }
 
-    /// User-saved palettes, shown in the settings presets dropdown under
-    /// "yours". Distinct from the active `palette` (which always persists on its
-    /// own) — these are named bookmarks the user can return to after editing.
+    /// User-saved palettes, listed in the settings presets dropdown after the
+    /// built-ins. Distinct from the active `palette` (which always persists on
+    /// its own) — these are named bookmarks the user can return to after editing.
     var savedPalettes: [SavedPalette] {
         get {
             guard let data = UserDefaults.standard.data(forKey: "savedPalettes"),
