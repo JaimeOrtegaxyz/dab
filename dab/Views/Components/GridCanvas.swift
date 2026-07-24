@@ -14,6 +14,10 @@ struct GridCanvas: View {
     /// same in squares, dots, and blobs modes.
     var highlightedPaletteIndex: Int? = nil
 
+    /// Device pixels per point, used to snap cell edges onto the physical pixel
+    /// grid (see `snappedEdges`).
+    @Environment(\.displayScale) private var displayScale
+
     var body: some View {
         Canvas { context, size in
             let actualSize = gridState.size
@@ -37,19 +41,65 @@ struct GridCanvas: View {
         }
     }
 
-    /// Square pixels — one fill per colored cell. Shared by Square mode and (via
-    /// a clipped context) Mix mode.
+    /// Cell-boundary positions along `length`, one per grid line (count + 1 of
+    /// them), each snapped to the nearest whole device pixel.
+    ///
+    /// This is what kills the white seams between squares. `Canvas` anti-aliases
+    /// every fill, so when two differently-colored cells meet on a *fractional*
+    /// pixel edge, each only partially covers the boundary pixels and the white
+    /// background painted underneath leaks through as a hairline — worse at high
+    /// grid sizes where the fractional part lands differently on every edge.
+    /// Snapping every boundary onto the physical pixel grid makes adjacent cells
+    /// share an exact integer edge, so there's no partial coverage and no gap.
+    private func snappedEdges(count: Int, length: CGFloat) -> [CGFloat] {
+        let scale = max(displayScale, 1)
+        return (0...count).map { i in
+            ((CGFloat(i) * length / CGFloat(count)) * scale).rounded() / scale
+        }
+    }
+
+    /// Square pixels, drawn with antialiasing disabled.
+    ///
+    /// Every edge in this mode is axis-aligned, so AA can only hurt: wherever a
+    /// cell boundary misses the physical pixel grid — fractional view origin, a
+    /// scaled canvas, anything outside local coordinates — the boundary pixel's
+    /// coverage is split between the two fills and the white background
+    /// composites through as flickering hairlines. Snapping edges in *local*
+    /// space (`snappedEdges`, still used so cells stay uniform and the hover
+    /// wash aligns) can't reach misalignment introduced by the layout chain.
+    /// With AA off each raster pixel belongs wholly to exactly one fill, so
+    /// neighbors tile with zero gaps by construction, at any alignment. The
+    /// dots/blobs paths keep AA — their curves need it, and their dilated
+    /// geometry never leaked.
     private func drawCells(in context: GraphicsContext, size: CGSize) {
         let actualSize = gridState.size
         guard actualSize > 0 else { return }
-        let cellW = size.width / CGFloat(actualSize)
-        let cellH = size.height / CGFloat(actualSize)
+        let xEdges = snappedEdges(count: actualSize, length: size.width)
+        let yEdges = snappedEdges(count: actualSize, length: size.height)
 
+        var rectsByColor: [PixelColor: [CGRect]] = [:]
         for row in 0..<actualSize {
             for col in 0..<actualSize {
                 guard let swatch = gridState.effectiveSwatch(row: row, col: col) else { continue }
-                let rect = CGRect(x: CGFloat(col) * cellW, y: CGFloat(row) * cellH, width: cellW, height: cellH)
-                context.fill(Path(rect), with: .color(Color(pixelColor: swatch.color)))
+                rectsByColor[swatch.color, default: []].append(CGRect(
+                    x: xEdges[col],
+                    y: yEdges[row],
+                    width: xEdges[col + 1] - xEdges[col],
+                    height: yEdges[row + 1] - yEdges[row]
+                ))
+            }
+        }
+
+        context.withCGContext { cg in
+            cg.setShouldAntialias(false)
+            for (color, rects) in rectsByColor {
+                cg.setFillColor(CGColor(
+                    srgbRed: CGFloat(color.red),
+                    green: CGFloat(color.green),
+                    blue: CGFloat(color.blue),
+                    alpha: 1
+                ))
+                cg.fill(rects)
             }
         }
     }
@@ -127,12 +177,16 @@ struct GridCanvas: View {
     private func drawHighlightWash(in context: GraphicsContext, size: CGSize, keeping index: Int) {
         let actualSize = gridState.size
         guard actualSize > 0 else { return }
-        let cellW = size.width / CGFloat(actualSize)
-        let cellH = size.height / CGFloat(actualSize)
+        let xEdges = snappedEdges(count: actualSize, length: size.width)
+        let yEdges = snappedEdges(count: actualSize, length: size.height)
 
         let paletteCount = gridState.palette.count
         let keepingSeeThrough = index >= 0 && index < paletteCount && gridState.palette[index].isTransparent
 
+        // Merge the washed cells into one path so the translucent fill lands as
+        // a single coverage pass — overlapping per-cell fills would double up on
+        // shared edges and read as seams of their own.
+        var wash = Path()
         for row in 0..<actualSize {
             for col in 0..<actualSize {
                 let owned: Bool
@@ -146,9 +200,14 @@ struct GridCanvas: View {
                     owned = gridState.effectivePaletteIndex(row: row, col: col) == index
                 }
                 guard !owned else { continue }
-                let rect = CGRect(x: CGFloat(col) * cellW, y: CGFloat(row) * cellH, width: cellW, height: cellH)
-                context.fill(Path(rect), with: .color(.white.opacity(0.6)))
+                wash.addRect(CGRect(
+                    x: xEdges[col],
+                    y: yEdges[row],
+                    width: xEdges[col + 1] - xEdges[col],
+                    height: yEdges[row + 1] - yEdges[row]
+                ))
             }
         }
+        context.fill(wash, with: .color(.white.opacity(0.6)))
     }
 }

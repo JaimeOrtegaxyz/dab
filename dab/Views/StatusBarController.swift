@@ -136,6 +136,27 @@ final class StatusBarController {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
+    // MARK: - Capture coordination
+
+    /// Whether the settings window is currently on screen. The capture flow
+    /// checks this so it only hides a window that's actually up.
+    var isSettingsWindowVisible: Bool { settingsWindow?.isVisible == true }
+
+    /// Pull the settings window off screen for the duration of a capture.
+    /// Activating the app to hide the cursor otherwise raises *every* dab
+    /// window, so an open settings window would jump in front of whatever the
+    /// user lined up to capture.
+    func hideSettingsWindow() {
+        settingsWindow?.orderOut(nil)
+    }
+
+    /// Put the settings window back exactly where it was — visible but not
+    /// focused, so restoring the previously-active app on top leaves the
+    /// pre-capture stacking intact.
+    func restoreSettingsWindow() {
+        settingsWindow?.orderFront(nil)
+    }
+
     @objc private func openSettings() {
         if let window = settingsWindow {
             window.makeKeyAndOrderFront(nil)

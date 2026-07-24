@@ -38,8 +38,13 @@ final class CaptureViewModel: ObservableObject {
     @Published var lastSavedURL: URL?
     @Published var isRandomizing: Bool = false
     @Published var randomVariationIndex: Int = 0
+    /// Name of the palette `c` just landed on, shown in the info bar until
+    /// `paletteFlashDuration` elapses. Nil the rest of the time.
+    @Published var paletteFlash: String?
 
     private let captureService = ScreenCaptureService()
+    private var paletteFlashWorkItem: DispatchWorkItem?
+    private let paletteFlashDuration: TimeInterval = 1.2
     private var timer: DispatchSourceTimer?
     private let captureQueue = DispatchQueue(label: "com.dab.capture", qos: .userInteractive)
     private let streamKeepAliveDuration: TimeInterval = 12
@@ -64,6 +69,7 @@ final class CaptureViewModel: ObservableObject {
         // The randomizer is a deliberate, modal action — never auto-enter
         // it on capture start, even if the last session ended inside it.
         isRandomizing = false
+        clearPaletteFlash()
         syncCurrentGridPresentation()
         publishSnapshot()
         isActive = true
@@ -106,6 +112,7 @@ final class CaptureViewModel: ObservableObject {
 
     func deactivate() {
         isActive = false
+        clearPaletteFlash()
         stopCaptureLoop()
         captureService.stop(keepAliveFor: streamKeepAliveDuration)
     }
@@ -127,7 +134,7 @@ final class CaptureViewModel: ObservableObject {
         case 124:
             viewportSize = min(600, viewportSize + viewportStep)
         case 126:
-            gridSize = min(32, gridSize + gridStep)
+            gridSize = min(64, gridSize + gridStep)
         case 125:
             gridSize = max(4, gridSize - gridStep)
         case 24, 69:
@@ -176,6 +183,9 @@ final class CaptureViewModel: ObservableObject {
             let all = FilterMode.allCases
             let idx = all.firstIndex(of: filterMode) ?? 0
             filterMode = all[(idx + 1) % all.count]
+        case 8:
+            // C — step to the next palette on the shelf.
+            cyclePalette()
         case 53:
             deactivate()
         default:
@@ -185,6 +195,45 @@ final class CaptureViewModel: ObservableObject {
         // Any handled key may have mutated capture-loop state; republish.
         publishSnapshot()
         return true
+    }
+
+    /// Steps the live palette to the next shelf entry and flashes its name.
+    ///
+    /// Persists the pick, so it survives the overlay closing and the settings
+    /// window shows the same palette — and posts, so a settings window that's
+    /// already open re-reads instead of holding a stale copy.
+    private func cyclePalette() {
+        // Catches a custom palette that predates the working slot, so the first
+        // press of `c` parks it instead of stepping off it forever.
+        PaletteLibrary.parkIfUnknown(palette)
+
+        guard let entry = PaletteLibrary.next(after: palette) else { return }
+
+        palette = entry.swatches
+        AppSettings.shared.palette = palette
+        syncCurrentGridPresentation()
+        flashPaletteName(entry.name)
+        NotificationCenter.default.post(name: .dabPaletteDidChange, object: nil)
+    }
+
+    /// Shows `name` in the info bar, then clears it. Each press restarts the
+    /// timer rather than stacking clears, so walking the shelf quickly keeps the
+    /// readout up the whole way instead of blinking out mid-walk.
+    private func flashPaletteName(_ name: String) {
+        paletteFlashWorkItem?.cancel()
+        paletteFlash = name
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.paletteFlash = nil
+        }
+        paletteFlashWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + paletteFlashDuration, execute: workItem)
+    }
+
+    private func clearPaletteFlash() {
+        paletteFlashWorkItem?.cancel()
+        paletteFlashWorkItem = nil
+        paletteFlash = nil
     }
 
     private func allowsKeyRepeat(for keyCode: UInt16) -> Bool {
@@ -277,7 +326,8 @@ final class CaptureViewModel: ObservableObject {
                         at: currentMouse,
                         size: currentViewportSize,
                         gridSize: currentGridSize,
-                        votePalette: voteColors
+                        votePalette: voteColors,
+                        chromaGain: GridFilters.chromaGain(forSpread: currentThreshold)
                     ) else { return }
                     colors = bundle.colors
                     paletteVotes = GridFilters.mapVotes(bundle.votes, toFullIndex: voteToFullIndex)

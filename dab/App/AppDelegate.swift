@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCursorHidden = false
     private var cursorHideDepth = 0
     private var lastExternalApplication: NSRunningApplication?
+    // Set when a capture hid the settings window, so dismiss knows to put it
+    // back. It's restored *unfocused, below* the re-activated external app, so
+    // the screen returns to exactly its pre-capture stacking.
+    private var didHideSettingsForCapture = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         updaterController = SPUStandardUpdaterController(
@@ -108,6 +112,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Take the settings window off screen before we activate the app below.
+        // Activation raises every dab window, so an open settings window would
+        // otherwise pop in front of the capture target. Done synchronously here
+        // so it's already gone by the time the deferred activation runs.
+        if statusBarController.isSettingsWindowVisible {
+            statusBarController.hideSettingsWindow()
+            didHideSettingsForCapture = true
+        }
+
         let mouseLocation = ScreenCaptureService.currentMouseLocation()
         let frame = frameForOverlay(at: mouseLocation)
 
@@ -196,6 +209,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setCursorHidden(false)
         overlayWindow?.orderOut(nil)
         overlayWindow = nil
+
+        // Bring the settings window back first (unfocused), then re-activate the
+        // external app on top of it, so the stacking matches what it was before
+        // the capture rather than leaving settings in front.
+        if didHideSettingsForCapture {
+            didHideSettingsForCapture = false
+            statusBarController.restoreSettingsWindow()
+        }
         lastExternalApplication?.activate(options: [])
     }
 
@@ -358,6 +379,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch type {
         case .leftMouseDown:
             viewModel.saveCurrentGrid()
+            // Flip active state now, synchronously. The tap gates on `isActive`
+            // (above), so leaving it true until the deferred teardown means the
+            // tap keeps swallowing keydowns — including the global hotkey you'd
+            // press to reopen, which sits *behind* this session tap and so never
+            // fires. Deactivating here is what the Escape path already does; the
+            // click path was the odd one out. dismissOverlay() calls deactivate()
+            // again, but it's idempotent.
+            viewModel.deactivate()
             // Defer teardown: dismissOverlay() invalidates this very event tap, so
             // running it synchronously tears down the mach port from inside its own
             // CGEventTapCallBack. Hop to the next main-runloop turn so the callback
@@ -407,7 +436,8 @@ struct OverlayHostView: View {
             horizontalMirrorMode: viewModel.horizontalMirrorMode,
             verticalMirrorMode: viewModel.verticalMirrorMode,
             isRandomizing: viewModel.isRandomizing,
-            randomVariationIndex: viewModel.randomVariationIndex
+            randomVariationIndex: viewModel.randomVariationIndex,
+            paletteFlash: viewModel.paletteFlash
         )
     }
 }

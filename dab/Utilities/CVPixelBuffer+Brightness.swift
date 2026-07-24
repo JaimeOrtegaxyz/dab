@@ -100,10 +100,17 @@ extension CVPixelBuffer {
     ///
     /// `votePalette` is expected to be the *non-transparent* swatch colors of
     /// the active palette, in any order. Vote indices map back into that array.
+    ///
+    /// `chromaGain` is Color Match's spread control (see
+    /// `GridFilters.chromaGain(forSpread:)`), applied to each source pixel
+    /// before it votes. It deliberately does **not** touch the accumulated
+    /// averages — those feed the brightness-driven filters, which have their
+    /// own reading of the slider.
     func colorAndVoteGrid(
         in region: CGRect,
         gridSize: Int,
-        votePalette: [PixelColor]
+        votePalette: [PixelColor],
+        chromaGain: Float
     ) -> (colors: [PixelColor], votes: [Int?]) {
         guard gridSize > 0 else {
             return ([], [])
@@ -167,6 +174,9 @@ extension CVPixelBuffer {
         var voteCounts = [Int](repeating: 0, count: max(paletteCount, 1))
         var voteDistances = [Float](repeating: 0, count: max(paletteCount, 1))
 
+        // Hoisted so the neutral case pays nothing per pixel.
+        let appliesChromaGain = chromaGain != 1
+
         for row in 0..<gridSize {
             for col in 0..<gridSize {
                 let startX = minX + Int(Float(col) * cellWidth)
@@ -209,6 +219,21 @@ extension CVPixelBuffer {
                         let gNorm = g / 255.0
                         let bNorm = b / 255.0
 
+                        // Spread: scale chroma around the pixel's own luma
+                        // before matching. Mirrors PixelColor.chromaScaled,
+                        // clamping included — PixelColor's initializer clamps,
+                        // so skipping it here would drift the two paths apart
+                        // at high gain.
+                        var mr = rNorm
+                        var mg = gNorm
+                        var mb = bNorm
+                        if appliesChromaGain {
+                            let luma = (0.2126 * rNorm) + (0.7152 * gNorm) + (0.0722 * bNorm)
+                            mr = min(1.0, max(0.0, luma + (rNorm - luma) * chromaGain))
+                            mg = min(1.0, max(0.0, luma + (gNorm - luma) * chromaGain))
+                            mb = min(1.0, max(0.0, luma + (bNorm - luma) * chromaGain))
+                        }
+
                         var bestIndex = 0
                         var bestDistance: Float = .infinity
 
@@ -216,12 +241,12 @@ extension CVPixelBuffer {
                             let pr = paletteR[i]
                             let pg = paletteG[i]
                             let pb = paletteB[i]
-                            let redMean = (rNorm + pr) * 0.5
+                            let redMean = (mr + pr) * 0.5
                             let redWeight = 2.0 + redMean
                             let blueWeight = 3.0 - redMean
-                            let dr = rNorm - pr
-                            let dg = gNorm - pg
-                            let db = bNorm - pb
+                            let dr = mr - pr
+                            let dg = mg - pg
+                            let db = mb - pb
                             let distance = (redWeight * dr * dr) + (4.0 * dg * dg) + (blueWeight * db * db)
                             if distance < bestDistance {
                                 bestDistance = distance

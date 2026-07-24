@@ -195,7 +195,11 @@ struct SettingsPreview: View {
                 colors = sampler.averages(gridSize: gridSize)
                 votes = nil
             } else {
-                let bundle = sampler.averagesAndVotes(gridSize: gridSize, votePalette: voteColors)
+                let bundle = sampler.averagesAndVotes(
+                    gridSize: gridSize,
+                    votePalette: voteColors,
+                    chromaGain: GridFilters.chromaGain(forSpread: brightnessThreshold)
+                )
                 colors = bundle.colors
                 votes = GridFilters.mapVotes(bundle.votes, toFullIndex: voteToFullIndex)
             }

@@ -19,6 +19,10 @@ final class PreviewSampler {
     private struct VoteKey: Hashable {
         let gridSize: Int
         let palette: [PixelColor]
+        /// Part of the key because the gain changes who wins each vote — drop
+        /// it and dragging the spread slider would keep serving votes matched
+        /// at the previous setting.
+        let chromaGain: Float
     }
 
     private let width: Int
@@ -79,7 +83,7 @@ final class PreviewSampler {
         if let cached = averageCache[gridSize] {
             return cached
         }
-        let (colors, _) = compute(gridSize: gridSize, votePalette: [])
+        let (colors, _) = compute(gridSize: gridSize, votePalette: [], chromaGain: 1)
         averageCache[gridSize] = colors
         return colors
     }
@@ -88,15 +92,20 @@ final class PreviewSampler {
     /// `votePalette`; map them with `GridFilters.mapVotes` before `apply`.
     /// Memoized: the preview's body re-evaluates on every unrelated settings
     /// change, and this pass shouldn't re-run unless its inputs did.
-    func averagesAndVotes(gridSize: Int, votePalette: [PixelColor]) -> (colors: [PixelColor], votes: [Int?]) {
-        let key = VoteKey(gridSize: gridSize, palette: votePalette)
+    func averagesAndVotes(
+        gridSize: Int,
+        votePalette: [PixelColor],
+        chromaGain: Float
+    ) -> (colors: [PixelColor], votes: [Int?]) {
+        let key = VoteKey(gridSize: gridSize, palette: votePalette, chromaGain: chromaGain)
         if let cached = voteCache[key] {
             return cached
         }
 
-        let result = compute(gridSize: gridSize, votePalette: votePalette)
+        let result = compute(gridSize: gridSize, votePalette: votePalette, chromaGain: chromaGain)
         averageCache[gridSize] = result.colors
-        // Color-well drags mint a new palette per tick; keep the cache bounded.
+        // Color-well and spread-slider drags mint a new key per tick; keep the
+        // cache bounded.
         if voteCache.count > 32 {
             voteCache.removeAll()
         }
@@ -106,7 +115,11 @@ final class PreviewSampler {
 
     // MARK: - Core (mirrors CVPixelBuffer.colorAndVoteGrid)
 
-    private func compute(gridSize: Int, votePalette: [PixelColor]) -> (colors: [PixelColor], votes: [Int?]) {
+    private func compute(
+        gridSize: Int,
+        votePalette: [PixelColor],
+        chromaGain: Float
+    ) -> (colors: [PixelColor], votes: [Int?]) {
         guard gridSize > 0 else { return ([], []) }
 
         let cellCount = gridSize * gridSize
@@ -130,6 +143,8 @@ final class PreviewSampler {
 
         var voteCounts = [Int](repeating: 0, count: max(paletteCount, 1))
         var voteDistances = [Float](repeating: 0, count: max(paletteCount, 1))
+
+        let appliesChromaGain = chromaGain != 1
 
         pixels.withUnsafeBufferPointer { bytes in
             for row in 0..<gridSize {
@@ -169,6 +184,17 @@ final class PreviewSampler {
                             let gNorm = g / 255.0
                             let bNorm = b / 255.0
 
+                            // Spread, identical to the capture path's gain.
+                            var mr = rNorm
+                            var mg = gNorm
+                            var mb = bNorm
+                            if appliesChromaGain {
+                                let luma = (0.2126 * rNorm) + (0.7152 * gNorm) + (0.0722 * bNorm)
+                                mr = min(1.0, max(0.0, luma + (rNorm - luma) * chromaGain))
+                                mg = min(1.0, max(0.0, luma + (gNorm - luma) * chromaGain))
+                                mb = min(1.0, max(0.0, luma + (bNorm - luma) * chromaGain))
+                            }
+
                             var bestIndex = 0
                             var bestDistance: Float = .infinity
 
@@ -176,12 +202,12 @@ final class PreviewSampler {
                                 let pr = paletteR[i]
                                 let pg = paletteG[i]
                                 let pb = paletteB[i]
-                                let redMean = (rNorm + pr) * 0.5
+                                let redMean = (mr + pr) * 0.5
                                 let redWeight = 2.0 + redMean
                                 let blueWeight = 3.0 - redMean
-                                let dr = rNorm - pr
-                                let dg = gNorm - pg
-                                let db = bNorm - pb
+                                let dr = mr - pr
+                                let dg = mg - pg
+                                let db = mb - pb
                                 let distance = (redWeight * dr * dr) + (4.0 * dg * dg) + (blueWeight * db * db)
                                 if distance < bestDistance {
                                     bestDistance = distance

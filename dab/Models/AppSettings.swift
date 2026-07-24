@@ -7,8 +7,8 @@ final class AppSettings {
     var gridSize: Int {
         // Clamp on read: gridSize is used as a divisor in cell-size math across
         // several files, so a 0/negative stored value (corruption or external
-        // tampering) would yield inf/NaN. Mirror the UI stepper's 4...32 range.
-        get { min(32, max(4, UserDefaults.standard.object(forKey: "gridSize") as? Int ?? 16)) }
+        // tampering) would yield inf/NaN. Mirror the UI stepper's 4...64 range.
+        get { min(64, max(4, UserDefaults.standard.object(forKey: "gridSize") as? Int ?? 16)) }
         set { UserDefaults.standard.set(newValue, forKey: "gridSize") }
     }
 
@@ -107,6 +107,45 @@ final class AppSettings {
             guard let data = try? JSONEncoder().encode(newValue) else { return }
             UserDefaults.standard.set(data, forKey: "savedPalettes")
         }
+    }
+
+    /// The single unnamed working palette — see `PaletteLibrary`. Holds an edit
+    /// that matches no preset, so switching away (the presets dropdown, or `c`
+    /// in the overlay) can't drop it. Writing nil, or an empty palette, clears
+    /// the slot.
+    var stashedPalette: [PaletteSwatch]? {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: "stashedPalette"),
+                  let decoded = try? JSONDecoder().decode([PaletteSwatch].self, from: data),
+                  !decoded.isEmpty else {
+                return nil
+            }
+
+            return Array(decoded.prefix(8))
+        }
+        set {
+            guard let newValue else {
+                UserDefaults.standard.removeObject(forKey: "stashedPalette")
+                return
+            }
+
+            let normalized = Array(newValue.prefix(8))
+            guard !normalized.isEmpty,
+                  let data = try? JSONEncoder().encode(normalized) else {
+                UserDefaults.standard.removeObject(forKey: "stashedPalette")
+                return
+            }
+
+            UserDefaults.standard.set(data, forKey: "stashedPalette")
+        }
+    }
+
+    /// Built-in presets the user deleted from the shelf, by name. Names (not
+    /// indices) so adding or reordering a built-in can't shift which ones stay
+    /// hidden.
+    var hiddenPresetNames: [String] {
+        get { UserDefaults.standard.stringArray(forKey: "hiddenPresetNames") ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: "hiddenPresetNames") }
     }
 
     var horizontalMirrorMode: HorizontalMirrorMode {

@@ -60,6 +60,27 @@ struct PixelColor: Codable, Hashable {
         return (redWeight * dr * dr) + (greenWeight * dg * dg) + (blueWeight * db * db)
     }
 
+    /// Scales chroma around the pixel's own luma, leaving perceived brightness
+    /// alone. `gain` 1 is the identity; 0 collapses to gray; above 1 saturates.
+    ///
+    /// Color Match's spread control runs through here: saturating pushes cells
+    /// onto swatches that were never the nearest match before (more of the
+    /// palette shows up), desaturating funnels them onto the neutral swatches
+    /// (the image flattens toward a few colors). Scaling around luma rather
+    /// than mid-gray is deliberate — pulling toward 0.5 instead would drag
+    /// darks and lights to the extremes and *reduce* the color variety this is
+    /// meant to increase.
+    func chromaScaled(_ gain: Float) -> PixelColor {
+        guard gain != 1 else { return self }
+
+        let luma = brightness
+        return PixelColor(
+            red: luma + (red - luma) * gain,
+            green: luma + (green - luma) * gain,
+            blue: luma + (blue - luma) * gain
+        )
+    }
+
     func contrastNormalized(low: Float, high: Float) -> PixelColor {
         let range = high - low
         guard range > 0.001 else { return self }
@@ -95,36 +116,43 @@ struct PaletteSwatch: Codable, Hashable, Identifiable {
         PaletteSwatch(color: PixelColor(hex: "#006AFF")!),
     ]
 
-    static let blackTransparentPalette: [PaletteSwatch] = [
-        PaletteSwatch(color: PixelColor(hex: "#000000")!),
-        PaletteSwatch(color: PixelColor(hex: "#000000")!, isTransparent: true),
-    ]
-
     /// Builds an opaque palette from hex strings (dev-authored, so force-unwrap
     /// is fine — same as the literals above). Index 0 is the Blobs grout.
     private static func hexes(_ values: String...) -> [PaletteSwatch] {
         values.map { PaletteSwatch(color: PixelColor(hex: $0)!) }
     }
 
-    /// The curated preset shelf. Names lean playful over descriptive; palettes
-    /// span deliberately different moods (bold primaries, arcade neon, glossy
-    /// aero, DMG greens, a brown-anchored candy set, and an ink stencil). #1 is
-    /// always the grout, so grout choice is part of each palette's look.
+    /// The curated preset shelf. Names lean playful over descriptive. The house
+    /// set is five bold primaries; the rest are lifted from photographs, so they
+    /// posterize coarsely and read as a mood rather than a reproduction. #1 is
+    /// always the grout, so grout choice is part of each palette's look — each
+    /// of these leads with its darkest color, and the swatches then climb in
+    /// brightness so the Threshold and Halftone bands ramp dark-to-light.
     static let presets: [PalettePreset] = [
         // The colorful house set (still the app default) — colored dots on black,
         // exactly a Lite-Brite peg board.
         PalettePreset(name: "lite brite", swatches: defaultPalette),
-        // Full 8-swatch neon cabinet on black.
-        PalettePreset(name: "insert coin", swatches: hexes(
-            "#000000", "#FF004D", "#FF8A00", "#FFE400",
-            "#14FF72", "#00D9FF", "#7A5CFF", "#FF3EC9"
+        // Adidas Originals SL 72 RS campaign: navy tracksuit, rust locker doors,
+        // carpet blue, skin, powder-blue walls.
+        PalettePreset(name: "locker room", swatches: hexes(
+            "#06286B", "#BD4527", "#3B829C", "#DA9678", "#B9E2F2"
         )),
-        // Solid chocolate grout surrounded by candy pops (not earthy neighbours).
-        PalettePreset(name: "choco taco", swatches: hexes(
-            "#5C3A21", "#FFD23F", "#FF5DA2", "#12D8B0", "#7B61FF"
+        // Rafael Pavarotti's "Damiana" — gold and lavender against near-black,
+        // the highest-contrast set on the shelf.
+        PalettePreset(name: "damiana", swatches: hexes(
+            "#040C05", "#ED980A", "#E6D8FA"
         )),
-        // Ink + one see-through swatch: silhouettes onto the desktop.
-        PalettePreset(name: "ghosted", swatches: blackTransparentPalette),
+        // Martin Parr's Benidorm — royal blue, sunburnt red, the azure of the
+        // towel and sunglasses, hot sand. Pushed past the film scan's own
+        // saturation to lite brite levels; the flash-lit source earns it.
+        PalettePreset(name: "sunburn", swatches: hexes(
+            "#0033B8", "#E12A1C", "#1E8CF0", "#FFC01F"
+        )),
+        // Bouroullec's Alcova glass for Wonderglass — bottle green, amber, and
+        // the white of blown glass held to the light.
+        PalettePreset(name: "hot glass", swatches: hexes(
+            "#336234", "#FF9601", "#E9E9E8"
+        )),
     ]
 }
 

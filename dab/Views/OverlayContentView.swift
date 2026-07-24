@@ -12,6 +12,9 @@ struct OverlayContentView: View {
     let verticalMirrorMode: VerticalMirrorMode
     let isRandomizing: Bool
     let randomVariationIndex: Int
+    /// Set for a beat after `c` switches palettes, then cleared — see
+    /// `CaptureViewModel.flashPaletteName`.
+    let paletteFlash: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +25,10 @@ struct OverlayContentView: View {
             // Info bar
             HStack {
                 Text(filterMode.shortDisplayName)
+                if let paletteFlash {
+                    Text(paletteFlash)
+                        .foregroundColor(.green)
+                }
                 if isRandomizing {
                     Text("random \(randomVariationIndex)")
                         .foregroundColor(.cyan)
@@ -48,6 +55,8 @@ struct OverlayContentView: View {
             .padding(.horizontal, 6)
             .frame(width: viewportSize, height: Self.infoBarHeight)
             .background(Color.black)
+            // Fades the palette name in and back out rather than popping it.
+            .animation(.easeOut(duration: 0.2), value: paletteFlash)
         }
     }
 }

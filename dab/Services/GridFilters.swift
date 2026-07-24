@@ -58,6 +58,25 @@ enum GridFilters {
         }
     }
 
+    /// Maps the filter slider onto Color Match's chroma multiplier.
+    ///
+    /// The slider is one control whose meaning depends on the filter (Outline
+    /// already reads it as edge sensitivity, not brightness); for Color Match
+    /// it is the spread knob. The midpoint must return exactly 1.0 so the
+    /// default is bit-identical to a plain nearest-color match — the faithful
+    /// translation stays the resting state, and the slider is expression laid
+    /// on top of it.
+    ///
+    /// Public because the samplers apply the same gain per source pixel before
+    /// voting; they and `applyColorMatch` must agree on the curve or the
+    /// overlay and the settings preview will quantize differently.
+    static func chromaGain(forSpread spread: Float) -> Float {
+        let spread = clamped(spread)
+        return spread <= 0.5
+            ? spread * 2                  // 0 -> 0 (grayscale), 0.5 -> 1
+            : 1 + (spread - 0.5) * 4      // 0.5 -> 1, 1 -> 3 (heavily saturated)
+    }
+
     private static func clamped(_ value: Float, min minValue: Float = 0, max maxValue: Float = 1) -> Float {
         Swift.min(maxValue, Swift.max(minValue, value))
     }
@@ -96,11 +115,19 @@ enum GridFilters {
         threshold: Float,
         paletteVotes: [Int?]? = nil
     ) -> [GridCell] {
-        colors.enumerated().map { index, color in
-            // Transparent-band assignment is brightness-driven and stays as
-            // it was: cells whose averaged brightness falls into the band
-            // occupied by a transparent swatch become transparent.
-            if let transparentIndex = transparentBandIndex(for: color, palette: palette, threshold: threshold) {
+        // `threshold` is the spread control here, not a brightness bias. The
+        // samplers already applied this same gain per source pixel before
+        // voting; it's recomputed for the averaged fallback path below.
+        let gain = chromaGain(forSpread: threshold)
+
+        return colors.enumerated().map { index, color in
+            // Transparent-band assignment is brightness-driven and pinned to
+            // the neutral split: cells whose averaged brightness falls into
+            // the band occupied by a transparent swatch become transparent.
+            // It used to track the slider, but the slider is the spread knob
+            // now — the see-through swatch still drops cells out, you just
+            // can't steer which band it claims.
+            if let transparentIndex = transparentBandIndex(for: color, palette: palette, threshold: 0.5) {
                 return paletteCell(transparentIndex, palette: palette)
             }
 
@@ -113,7 +140,7 @@ enum GridFilters {
 
             // Fallback: no vote (zero source pixels for this cell, or the
             // caller didn't provide votes). Match against the averaged color.
-            guard let nearest = nearestColorIndex(for: color, palette: palette) else {
+            guard let nearest = nearestColorIndex(for: color.chromaScaled(gain), palette: palette) else {
                 return paletteCell(0, palette: palette)
             }
 

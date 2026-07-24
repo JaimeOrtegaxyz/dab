@@ -29,20 +29,42 @@ private struct DropdownAnchorKey: PreferenceKey {
 private struct DropdownRowView: View {
     let label: String
     let isSelected: Bool
-    /// When set, a hover-revealed ✕ deletes this row (used for saved palettes).
-    var onDelete: (() -> Void)? = nil
+    /// SF Symbol drawn ahead of the label — marks the unsaved working slot.
+    var markerSymbol: String? = nil
+    /// When set, a hover-revealed ✕ *asks* to delete. The parent owns which row
+    /// is confirming, so only ever one is.
+    var onRequestDelete: (() -> Void)? = nil
+    var isConfirmingDelete: Bool = false
+    var onConfirmDelete: (() -> Void)? = nil
+    var onCancelDelete: (() -> Void)? = nil
+    /// The destructive verb, so the unsaved slot reads "discard" while named
+    /// palettes read "delete" — same mechanism, honest wording for each.
+    var destructiveVerb: String = "delete"
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
+        if isConfirmingDelete {
+            confirmRow
+        } else {
+            normalRow
+        }
+    }
+
+    private var normalRow: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                if let markerSymbol {
+                    Image(systemName: markerSymbol)
+                        .font(.system(size: 8, weight: .heavy))
+                        .foregroundStyle((isSelected ? WatchTheme.lcdInk : WatchTheme.caseInk).opacity(0.6))
+                }
                 Text(label.lowercased())
                     .font(WatchFont.body(13, weight: .semibold))
                     .foregroundStyle(isSelected ? WatchTheme.lcdInk : WatchTheme.caseInk)
                 Spacer(minLength: 8)
-                if let onDelete, hovering {
-                    Button(action: onDelete) {
+                if let onRequestDelete, hovering {
+                    Button(action: onRequestDelete) {
                         Image(systemName: "xmark")
                             .font(.system(size: 8, weight: .heavy))
                             .foregroundStyle(isSelected ? WatchTheme.lcdInk : WatchTheme.caseInk.opacity(0.7))
@@ -51,7 +73,7 @@ private struct DropdownRowView: View {
                     }
                     .buttonStyle(.plain)
                     .hoverCursor(.pointingHand)
-                    .help("delete this saved palette")
+                    .help("\(destructiveVerb) this palette")
                 } else if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .heavy))
@@ -69,6 +91,49 @@ private struct DropdownRowView: View {
         .buttonStyle(.plain)
         .hoverCursor(.pointingHand)
         .onHover { hovering = $0 }
+    }
+
+    /// Inverted to ink-on-yellow so it reads as a different kind of thing than
+    /// the rows around it, not just another option to click through.
+    ///
+    /// Confirm sits *inboard* of cancel deliberately: the ✕ that started this
+    /// prompt is at the trailing edge, so whatever lands under the cursor next
+    /// must be the harmless one.
+    private var confirmRow: some View {
+        HStack(spacing: 6) {
+            Text("\(destructiveVerb)?")
+                .font(WatchFont.body(12, weight: .heavy))
+                .foregroundStyle(WatchTheme.caseYellow)
+            Spacer(minLength: 4)
+
+            Button { onConfirmDelete?() } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(WatchTheme.caseYellow)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverCursor(.pointingHand)
+            .help("\(destructiveVerb) it")
+
+            Button { onCancelDelete?() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(WatchTheme.caseYellow.opacity(0.6))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverCursor(.pointingHand)
+            .help("keep it")
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 5).fill(WatchTheme.caseInk)
+        )
     }
 
     private var fill: Color {
@@ -391,6 +456,11 @@ struct SettingsView: View {
     @State private var savedPalettes: [SavedPalette] = AppSettings.shared.savedPalettes
     @State private var isNamingPalette: Bool = false
     @State private var newPaletteName: String = ""
+    /// The one shelf row currently asking "delete?", by `PaletteEntry.id`.
+    @State private var pendingDeleteEntryID: String? = nil
+    /// Bumped on every shelf change so the presets dropdown rebuilds — it reads
+    /// `PaletteLibrary`/`AppSettings`, which aren't SwiftUI-observable.
+    @State private var shelfRevision: Int = 0
     @FocusState private var isFilenameFieldFocused: Bool
     @FocusState private var isPaletteNameFocused: Bool
 
@@ -512,6 +582,15 @@ struct SettingsView: View {
             openAtLogin = LoginItemService.isEnabled
             updateFilenamePreview()
         }
+        // The overlay's `c` key changes the palette behind this window's back,
+        // and the window is reused across openings so `onAppear` won't fire
+        // again to catch it. Without this reload the next tile edit would write
+        // a stale palette back over whatever `c` picked.
+        .onReceive(NotificationCenter.default.publisher(for: .dabPaletteDidChange)) { _ in
+            palette = AppSettings.shared.palette
+            savedPalettes = AppSettings.shared.savedPalettes
+            shelfChanged()
+        }
         .onChange(of: filenameFormat) { _, _ in
             updateFilenamePreview()
         }
@@ -626,9 +705,9 @@ struct SettingsView: View {
             WatchSlider(
                 label: "grid size",
                 value: $gridSize,
-                in: 4...32,
+                in: 4...64,
                 defaultValue: 16,
-                tickStride: 4,
+                tickStride: 8,
                 format: { "\($0)x\($0)" }
             )
 
@@ -640,7 +719,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 WatchSlider(
-                    label: "brightness threshold",
+                    label: thresholdLabel,
                     value: $brightnessThreshold,
                     in: 0...1,
                     step: 0.01,
@@ -650,10 +729,6 @@ struct SettingsView: View {
                     coarseStep: 0.10,
                     format: { String(format: "%.2f", $0) }
                 )
-                // Actually inert, not just dimmed: when the current filter
-                // ignores the threshold, block drag/keys too. WatchSlider dims
-                // itself to 0.4 when disabled.
-                .disabled(thresholdIsInert)
 
                 Text(thresholdCaption)
                     .font(WatchFont.body(9, weight: .medium))
@@ -734,20 +809,26 @@ struct SettingsView: View {
         }
     }
 
-    private var thresholdIsInert: Bool {
-        filterMode == .colorMatch && !palette.contains(where: \.isTransparent)
+    // One slider, one "+ / -", but the axis belongs to the filter — Outline
+    // has always read it as edge sensitivity rather than brightness. Naming it
+    // per mode keeps the label honest instead of calling everything a
+    // brightness threshold.
+    private var thresholdLabel: String {
+        switch filterMode {
+        case .colorMatch: return "color spread"
+        case .threshold, .halftone: return "brightness threshold"
+        case .edgeDetect: return "edge sensitivity"
+        }
     }
 
     private var thresholdCaption: String {
         switch filterMode {
         case .colorMatch:
-            return thresholdIsInert
-                ? "no effect — no see-through swatch"
-                : "shifts which brightness band goes see-through"
+            return "low flattens to a few colors, high pulls in more of the palette"
         case .threshold, .halftone:
             return "biases cells toward darker or brighter swatches"
         case .edgeDetect:
-            return "edge sensitivity — higher catches more edges"
+            return "higher catches more edges"
         }
     }
 
@@ -761,9 +842,10 @@ struct SettingsView: View {
                     paletteNameField
                 } else {
                     presetsMenu
-                    // Offer "save" only when the live palette is something the
-                    // user built (matches no preset, built-in or saved yet).
-                    if currentPresetName == nil {
+                    // Offer "save" whenever the live palette has no name of its
+                    // own — including while it sits in the unsaved slot, which
+                    // is exactly when naming it matters most.
+                    if isPaletteUnnamed {
                         saveChip
                     }
                 }
@@ -884,33 +966,55 @@ struct SettingsView: View {
             savedPalettes.append(SavedPalette(name: name, swatches: palette))
         }
         AppSettings.shared.savedPalettes = savedPalettes
+        // It has a name now, so the working slot has nothing left to protect.
+        PaletteLibrary.clearUnsavedSlot()
+        shelfChanged()
         cancelSavePalette()
     }
 
-    private func deleteSavedPalette(_ saved: SavedPalette) {
-        savedPalettes.removeAll { $0.id == saved.id }
-        AppSettings.shared.savedPalettes = savedPalettes
+    /// Removes a built-in or saved palette from the shelf, after its row's
+    /// confirm step.
+    private func deleteEntry(_ entry: PaletteEntry) {
+        PaletteLibrary.delete(entry, livePalette: palette)
+        savedPalettes = AppSettings.shared.savedPalettes
+        pendingDeleteEntryID = nil
+        shelfChanged()
     }
 
-    /// The preset whose colours (and see-through flags, in order) the current
-    /// palette exactly matches — checks built-in presets first, then the user's
-    /// saved palettes; `nil` once the palette is edited into something custom.
-    /// Exact float compare is fine: palettes are applied verbatim.
-    private var currentPresetName: String? {
-        if let preset = PaletteSwatch.presets.first(where: { paletteMatches($0.swatches) }) {
-            return preset.name
+    /// Throws the working slot away. When it was the live palette, switch onto
+    /// the returned fallback *directly* rather than through `setPalette` — that
+    /// path calls `parkIfUnknown`, which would re-park the very edit we just
+    /// discarded (the live palette matches nothing now that the slot's clear).
+    private func discardUnsaved() {
+        if let fallback = PaletteLibrary.discardUnsaved(livePalette: palette) {
+            palette = Array(fallback.prefix(8))
+            if let id = selectedSwatchID, !palette.contains(where: { $0.id == id }) {
+                selectedSwatchID = nil
+            }
+            AppSettings.shared.palette = palette
         }
-        if let saved = savedPalettes.first(where: { paletteMatches($0.swatches) }) {
-            return saved.name
-        }
-        return nil
+        pendingDeleteEntryID = nil
+        shelfChanged()
     }
 
-    private func paletteMatches(_ swatches: [PaletteSwatch]) -> Bool {
-        swatches.count == palette.count &&
-        zip(swatches, palette).allSatisfy {
-            $0.color == $1.color && $0.isTransparent == $1.isTransparent
-        }
+    private func shelfChanged() {
+        shelfRevision &+= 1
+    }
+
+    /// The shelf entry the live palette currently *is* — a built-in, one of
+    /// yours, or the unsaved working slot; `nil` in the moment before an edit
+    /// has been parked.
+    private var currentEntry: PaletteEntry? {
+        PaletteLibrary.entry(matching: palette)
+    }
+
+    private var currentPresetName: String? { currentEntry?.name }
+
+    /// True when the live palette has no name of its own — it matches nothing,
+    /// or it's the working slot. Both are states the save chip should offer to
+    /// name.
+    private var isPaletteUnnamed: Bool {
+        currentEntry.map(\.isUnsaved) ?? true
     }
 
     // MARK: - Themed dropdown plumbing
@@ -936,6 +1040,9 @@ struct SettingsView: View {
     }
 
     private func closeDropdown() {
+        // Closing abandons any pending confirm — a delete prompt must never
+        // survive to catch the next opening of the list.
+        pendingDeleteEntryID = nil
         withAnimation(.easeOut(duration: 0.12)) { openDropdown = nil }
     }
 
@@ -973,24 +1080,9 @@ struct SettingsView: View {
                     }
                 }
             case .presets:
-                ForEach(PaletteSwatch.presets) { preset in
-                    DropdownRowView(label: preset.name,
-                                    isSelected: preset.name == currentPresetName) {
-                        setPalette(preset.swatches)
-                        closeDropdown()
-                    }
-                }
-                if !savedPalettes.isEmpty {
-                    dropdownGroupLabel("yours")
-                    ForEach(savedPalettes) { saved in
-                        DropdownRowView(label: saved.name,
-                                        isSelected: saved.name == currentPresetName,
-                                        onDelete: { deleteSavedPalette(saved) }) {
-                            setPalette(saved.swatches)
-                            closeDropdown()
-                        }
-                    }
-                }
+                // Rebuilt whenever the shelf changes: `PaletteLibrary` reads
+                // `AppSettings`, which SwiftUI can't observe on its own.
+                presetsPanelContent.id(shelfRevision)
             }
         }
         .padding(4)
@@ -1004,6 +1096,85 @@ struct SettingsView: View {
                         .stroke(WatchTheme.caseInk, lineWidth: 1)
                 )
         )
+    }
+
+    /// The palette shelf, in the same order `c` walks it: built-ins, then
+    /// yours, then the single unsaved working slot.
+    @ViewBuilder
+    private var presetsPanelContent: some View {
+        paletteRows(PaletteLibrary.builtIns)
+
+        let yours = PaletteLibrary.saved
+        if !yours.isEmpty {
+            dropdownGroupLabel("yours")
+            paletteRows(yours)
+        }
+
+        if let working = PaletteLibrary.unsaved {
+            dropdownGroupLabel("unsaved")
+            paletteRows([working])
+        }
+
+        if PaletteLibrary.hasHiddenBuiltIns {
+            restoreBuiltInsRow
+        }
+    }
+
+    private func paletteRows(_ entries: [PaletteEntry]) -> some View {
+        ForEach(entries) { entry in
+            DropdownRowView(
+                label: entry.name,
+                isSelected: entry.id == currentEntry?.id,
+                // A dashed ring, so the slot reads as "not committed yet" at a
+                // glance rather than only via the group heading above it.
+                markerSymbol: entry.isUnsaved ? "circle.dashed" : nil,
+                // The unsaved slot can always be thrown away; named palettes
+                // follow the keep-at-least-one rule.
+                onRequestDelete: (entry.isUnsaved || PaletteLibrary.canDelete(entry))
+                    ? { pendingDeleteEntryID = entry.id }
+                    : nil,
+                isConfirmingDelete: pendingDeleteEntryID == entry.id,
+                onConfirmDelete: { entry.isUnsaved ? discardUnsaved() : deleteEntry(entry) },
+                onCancelDelete: { pendingDeleteEntryID = nil },
+                destructiveVerb: entry.isUnsaved ? "discard" : "delete"
+            ) {
+                pendingDeleteEntryID = nil
+                setPalette(entry.swatches)
+                closeDropdown()
+            }
+        }
+    }
+
+    /// Only shown once a built-in has been deleted — the way back, since
+    /// deleting one is otherwise a one-way door.
+    private var restoreBuiltInsRow: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(WatchTheme.caseInk.opacity(0.18))
+                .frame(height: 1)
+                .padding(.horizontal, 8)
+                .padding(.top, 5)
+
+            Button {
+                PaletteLibrary.restoreBuiltIns()
+                shelfChanged()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 8, weight: .heavy))
+                    Text("restore built-ins")
+                        .font(WatchFont.body(11, weight: .semibold))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(WatchTheme.caseInk.opacity(0.6))
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverCursor(.pointingHand)
+        }
     }
 
     /// A silkscreen divider inside a dropdown list — separates the built-in
@@ -1364,7 +1535,7 @@ struct SettingsView: View {
             SilkscreenRule()
             shortcutRow("up / down", "change grid size")
             SilkscreenRule()
-            shortcutRow("+ / -", "adjust threshold")
+            shortcutRow("+ / -", "adjust the current filter's dial")
             SilkscreenRule()
             shortcutRow("shift + arrows / +/-", "larger jumps")
             SilkscreenRule()
@@ -1379,6 +1550,8 @@ struct SettingsView: View {
             shortcutRow("1-4", "select filter mode")
             SilkscreenRule()
             shortcutRow("f", "cycle filter mode")
+            SilkscreenRule()
+            shortcutRow("c", "cycle palettes (built-ins, yours, then unsaved)")
             SilkscreenRule()
             shortcutRow("z", "toggle randomizer")
             SilkscreenRule()
@@ -1460,6 +1633,10 @@ struct SettingsView: View {
     }
 
     private func setPalette(_ swatches: [PaletteSwatch]) {
+        // Same guard as the overlay's `c`: park an unparked custom palette
+        // before stepping off it.
+        PaletteLibrary.parkIfUnknown(palette)
+
         palette = Array(swatches.prefix(8))
         if palette.isEmpty {
             palette = PaletteSwatch.defaultPalette
@@ -1467,7 +1644,10 @@ struct SettingsView: View {
         if let id = selectedSwatchID, !palette.contains(where: { $0.id == id }) {
             selectedSwatchID = nil
         }
-        savePalette()
+        // Switching, not editing: persist the pick but leave the working slot
+        // alone, or stepping onto a named palette would discard the very edit
+        // the slot exists to hold.
+        AppSettings.shared.palette = palette
     }
 
     private func addPaletteColorAndSelect() {
@@ -1500,8 +1680,13 @@ struct SettingsView: View {
         savePalette()
     }
 
+    /// Persists an *edit*. Every mutation of the tiles routes through here, so
+    /// the working slot always holds the newest unnamed palette — and empties
+    /// itself the moment an edit lands back on a named one.
     private func savePalette() {
         AppSettings.shared.palette = palette
+        PaletteLibrary.syncUnsavedSlot(with: palette)
+        shelfChanged()
     }
 
     // MARK: - Hotkey Recording

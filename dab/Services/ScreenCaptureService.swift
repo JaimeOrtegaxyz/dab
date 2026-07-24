@@ -95,7 +95,8 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         at mouseLocation: NSPoint,
         size: CGFloat,
         gridSize: Int,
-        votePalette: [PixelColor]
+        votePalette: [PixelColor],
+        chromaGain: Float
     ) -> (colors: [PixelColor], votes: [Int?])? {
         guard let screen = Self.screen(containing: mouseLocation) else {
             return nil
@@ -112,7 +113,8 @@ final class ScreenCaptureService: NSObject, SCStreamOutput, SCStreamDelegate {
         return pixelBuffer.colorAndVoteGrid(
             in: cropRect,
             gridSize: gridSize,
-            votePalette: votePalette
+            votePalette: votePalette,
+            chromaGain: chromaGain
         )
     }
 
