@@ -33,5 +33,25 @@
           </item>
         -->
 
+        <item>
+            <title>v0.5.0</title>
+            <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.0</link>
+            <sparkle:version>0.5.0</sparkle:version>
+            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Sat, 25 Jul 2026 00:13:44 +0000</pubDate>
+            <description><![CDATA[
+                <p>First public release: squares/dots/blobs render modes, four
+                filters with a color-spread dial, grids up to 64&times;64,
+                editable palettes with presets and a see-through swatch, and
+                SVG export.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/JaimeOrtegaxyz/dab/releases/download/v0.5.0/dab-0.5.0.dmg"
+                sparkle:edSignature="7YRzzZjdcDp7X2GDo2UcYTm/EWG0aFy99mDKEpaYk/jWWg/vdD0ue/dOupeUI81JdHzebM5OsEurETeCS08hDg=="
+                length="2671264"
+                type="application/octet-stream" />
+        </item>
+
     </channel>
 </rss>
