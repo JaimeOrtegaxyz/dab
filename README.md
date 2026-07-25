@@ -1,4 +1,6 @@
-# dab
+<p align="center">
+  <img src="docs/images/dab-text.png" alt="dab" width="480">
+</p>
 
 Silly little tool to make silly little graphics. Started as an internal tool
 at the studio, but was too charming to keep it internal-only. It turns any
@@ -78,3 +80,7 @@ works too if you only want the binary compiled.
 ## License
 
 [MIT](LICENSE)
+
+<p align="center">
+  <img src="dab/Resources/dab-logo.png" alt="dab" width="80">
+</p>
