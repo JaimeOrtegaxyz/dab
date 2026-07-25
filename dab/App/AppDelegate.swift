@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var didHideSettingsForCapture = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before any UI can snapshot the shelf (see PaletteLibrary.seedIfNeeded).
+        PaletteLibrary.seedIfNeeded()
+
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,

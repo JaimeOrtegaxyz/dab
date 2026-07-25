@@ -91,9 +91,10 @@ final class AppSettings {
         }
     }
 
-    /// User-saved palettes, listed in the settings presets dropdown after the
-    /// built-ins. Distinct from the active `palette` (which always persists on
-    /// its own) — these are named bookmarks the user can return to after editing.
+    /// The named palette shelf — the user's saves plus the preinstalled
+    /// palettes, which PaletteLibrary seeds in here on first run. Distinct from
+    /// the active `palette` (which always persists on its own) — these are
+    /// named bookmarks the user can return to after editing.
     var savedPalettes: [SavedPalette] {
         get {
             guard let data = UserDefaults.standard.data(forKey: "savedPalettes"),
@@ -143,6 +144,9 @@ final class AppSettings {
     /// Built-in presets the user deleted from the shelf, by name. Names (not
     /// indices) so adding or reordering a built-in can't shift which ones stay
     /// hidden.
+    /// Legacy (pre-unified-shelf): built-ins the user had "deleted" under the
+    /// old hide-built-ins model. Read once by PaletteLibrary's seeding
+    /// migration, then cleared. Keep for migration; don't build on it.
     var hiddenPresetNames: [String] {
         get { UserDefaults.standard.stringArray(forKey: "hiddenPresetNames") ?? [] }
         set { UserDefaults.standard.set(newValue, forKey: "hiddenPresetNames") }

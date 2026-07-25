@@ -7,9 +7,8 @@ import Foundation
 /// the same sequence by construction rather than by two copies staying in sync.
 struct PaletteEntry: Identifiable, Equatable {
     enum Kind: Equatable {
-        /// A `PaletteSwatch.presets` entry the user hasn't deleted.
-        case builtIn
-        /// One of the user's named palettes.
+        /// One of the user's named palettes (including the preinstalled ones,
+        /// which are seeded into the same store on first run).
         case saved(UUID)
         /// The single working slot — see `PaletteLibrary.syncUnsavedSlot`.
         case unsaved
@@ -21,7 +20,6 @@ struct PaletteEntry: Identifiable, Equatable {
 
     var id: String {
         switch kind {
-        case .builtIn: return "builtin:\(name)"
         case .saved(let uuid): return "saved:\(uuid.uuidString)"
         case .unsaved: return "unsaved"
         }
@@ -30,32 +28,62 @@ struct PaletteEntry: Identifiable, Equatable {
     var isUnsaved: Bool { kind == .unsaved }
 }
 
-/// The palette shelf: built-in presets, the user's saved palettes, and one
-/// working slot for an edit that hasn't been named yet. Shared by the capture
-/// overlay and the settings window so both agree on what exists and in what
-/// order.
+/// The palette shelf: the user's named palettes plus one working slot for an
+/// edit that hasn't been named yet. Shared by the capture overlay and the
+/// settings window so both agree on what exists and in what order.
+///
+/// There is deliberately no separate "built-in" tier: `PaletteSwatch.presets`
+/// are seeded into `savedPalettes` on first run and behave like palettes the
+/// user made — one list, one delete, one mental model. A "hide built-in vs.
+/// delete saved" split looks tidier in code but hands the user two identical
+/// rows with different destruction semantics, which is worse. The presets are
+/// starter examples, nothing more: deleting one is as final as deleting your
+/// own, and anyone who misses one can recreate it (they're documented in the
+/// README).
 enum PaletteLibrary {
     /// Label for the working slot, in the dropdown and the overlay flash.
     static let unsavedName = "unsaved"
 
+    // MARK: - Seeding
+
+    private static let didSeedKey = "didSeedPresetPalettes"
+
+    /// One-time migration of the preset shelf into `savedPalettes`. Presets
+    /// the user had "deleted" under the old hidden-built-ins model are simply
+    /// not seeded, and a saved palette that already claimed a preset's name
+    /// wins (name is identity, matching `commitSavePalette`'s overwrite rule).
+    /// The legacy `hiddenPresetNames` list is cleared afterward — it's inert
+    /// once the shelf is unified.
+    ///
+    /// Called from every shelf read *and* explicitly at app launch: the
+    /// settings window snapshots `savedPalettes` into `@State` at
+    /// construction, and a pre-seed snapshot written back by a later save
+    /// would silently wipe the seeded presets.
+    static func seedIfNeeded() {
+        ensureSeeded()
+    }
+
+    private static func ensureSeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: didSeedKey) else { return }
+        defaults.set(true, forKey: didSeedKey)
+
+        let hidden = Set(AppSettings.shared.hiddenPresetNames)
+        let existing = AppSettings.shared.savedPalettes
+        let existingNames = Set(existing.map { $0.name.lowercased() })
+        let seeds = PaletteSwatch.presets
+            .filter { !hidden.contains($0.name) && !existingNames.contains($0.name.lowercased()) }
+            .map { SavedPalette(name: $0.name, swatches: $0.swatches) }
+
+        AppSettings.shared.savedPalettes = seeds + existing
+        AppSettings.shared.hiddenPresetNames = []
+    }
+
     // MARK: - Sources
 
-    /// Built-ins the user has deleted. Stored as names rather than indices so
-    /// shipping or reordering a preset doesn't silently hide a different one.
-    private static var hiddenBuiltInNames: Set<String> {
-        get { Set(AppSettings.shared.hiddenPresetNames) }
-        set { AppSettings.shared.hiddenPresetNames = Array(newValue).sorted() }
-    }
-
-    static var builtIns: [PaletteEntry] {
-        let hidden = hiddenBuiltInNames
-        return PaletteSwatch.presets
-            .filter { !hidden.contains($0.name) }
-            .map { PaletteEntry(kind: .builtIn, name: $0.name, swatches: $0.swatches) }
-    }
-
     static var saved: [PaletteEntry] {
-        AppSettings.shared.savedPalettes.map {
+        ensureSeeded()
+        return AppSettings.shared.savedPalettes.map {
             PaletteEntry(kind: .saved($0.id), name: $0.name, swatches: $0.swatches)
         }
     }
@@ -66,9 +94,11 @@ enum PaletteLibrary {
         return PaletteEntry(kind: .unsaved, name: unsavedName, swatches: swatches)
     }
 
-    /// Everything, in cycle order: built-ins, then yours, then the working slot.
+    /// Everything, in cycle order: named palettes, then the working slot.
+    /// The settings dropdown renders these same slices, so "what cycling does"
+    /// and "what the list shows" stay one sequence by construction.
     static var entries: [PaletteEntry] {
-        builtIns + saved + (unsaved.map { [$0] } ?? [])
+        saved + (unsaved.map { [$0] } ?? [])
     }
 
     // MARK: - Matching
@@ -109,7 +139,7 @@ enum PaletteLibrary {
     /// "lite brite" must leave the slot alone, or stepping past a preset with
     /// `c` would throw away the very edit the slot exists to protect.
     static func syncUnsavedSlot(with palette: [PaletteSwatch]) {
-        let isNamed = (builtIns + saved).contains { matches($0.swatches, palette) }
+        let isNamed = saved.contains { matches($0.swatches, palette) }
         AppSettings.shared.stashedPalette = isNamed ? nil : palette
     }
 
@@ -132,7 +162,7 @@ enum PaletteLibrary {
         let wasLive = unsaved.map { matches($0.swatches, livePalette) } ?? false
         clearUnsavedSlot()
         guard wasLive else { return nil }
-        return (builtIns + saved).first?.swatches ?? PaletteSwatch.defaultPalette
+        return saved.first?.swatches ?? PaletteSwatch.defaultPalette
     }
 
     /// Parks `palette` if it's on the shelf nowhere at all — a custom palette
@@ -151,27 +181,21 @@ enum PaletteLibrary {
 
     /// Whether `entry` can be removed. The shelf must always keep at least one
     /// named palette, or the dropdown and the `c` cycle would have nothing to
-    /// offer. The working slot isn't deletable: it empties itself when saved or
-    /// when the palette is edited back onto a named one.
+    /// offer. The working slot isn't deletable through here: it has its own
+    /// `discardUnsaved` path.
     static func canDelete(_ entry: PaletteEntry) -> Bool {
         guard !entry.isUnsaved else { return false }
-        return builtIns.count + saved.count > 1
+        return saved.count > 1
     }
 
-    /// Removes `entry` from the shelf. A deleted palette that's still the live
-    /// one lands in the working slot rather than vanishing out from under the
-    /// user mid-edit.
+    /// Removes `entry` from the shelf — permanently, whatever its origin. A
+    /// deleted palette that's still the live one lands in the working slot
+    /// rather than vanishing out from under the user mid-use.
     static func delete(_ entry: PaletteEntry, livePalette: [PaletteSwatch]) {
         guard canDelete(entry) else { return }
 
-        switch entry.kind {
-        case .builtIn:
-            hiddenBuiltInNames.insert(entry.name)
-        case .saved(let id):
-            AppSettings.shared.savedPalettes.removeAll { $0.id == id }
-        case .unsaved:
-            return
-        }
+        guard case .saved(let id) = entry.kind else { return }
+        AppSettings.shared.savedPalettes.removeAll { $0.id == id }
 
         // Only when the deleted palette was the live one: it just lost its
         // name, so park it instead of letting it vanish mid-use. Deleting any
@@ -183,17 +207,6 @@ enum PaletteLibrary {
         }
     }
 
-    /// Whether any built-in has been deleted, so the settings dropdown knows to
-    /// offer the way back.
-    static var hasHiddenBuiltIns: Bool {
-        !hiddenBuiltInNames.isEmpty
-    }
-
-    /// Brings every deleted built-in back. There's no per-preset undo: the
-    /// hidden set is small and unordered, so one restore is the whole story.
-    static func restoreBuiltIns() {
-        hiddenBuiltInNames = []
-    }
 }
 
 extension Notification.Name {

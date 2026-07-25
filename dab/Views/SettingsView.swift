@@ -1098,36 +1098,43 @@ struct SettingsView: View {
         )
     }
 
-    /// The palette shelf, in the same order `c` walks it: built-ins and saved
-    /// palettes as one flat list, then the single unsaved working slot as its
-    /// own trailing section. (Built-in vs. yours used to be separate groups,
-    /// but the split carried no information the rows didn't — a palette is a
-    /// palette; only "not committed yet" earns a heading.)
+    /// The palette shelf, in the same order `c` walks it: the user's named
+    /// palettes (the preinstalled ones are seeded into the same store, so they
+    /// are not a separate tier), then the single unsaved working slot as its
+    /// own trailing section — only "not committed yet" earns a heading.
+    ///
+    /// `current` and `canDeleteNamed` are computed once here, not per row:
+    /// both walk the shelf (JSON decodes from UserDefaults under the hood),
+    /// and neither varies across a single render pass.
     @ViewBuilder
     private var presetsPanelContent: some View {
-        paletteRows(PaletteLibrary.builtIns + PaletteLibrary.saved)
+        let named = PaletteLibrary.saved
+        let current = PaletteLibrary.entry(matching: palette)
+        let canDeleteNamed = named.count > 1
+
+        paletteRows(named, current: current, canDeleteNamed: canDeleteNamed)
 
         if let working = PaletteLibrary.unsaved {
-            dropdownGroupLabel("unsaved")
-            paletteRows([working])
-        }
-
-        if PaletteLibrary.hasHiddenBuiltIns {
-            restoreBuiltInsRow
+            dropdownGroupLabel(PaletteLibrary.unsavedName)
+            paletteRows([working], current: current, canDeleteNamed: canDeleteNamed)
         }
     }
 
-    private func paletteRows(_ entries: [PaletteEntry]) -> some View {
+    private func paletteRows(
+        _ entries: [PaletteEntry],
+        current: PaletteEntry?,
+        canDeleteNamed: Bool
+    ) -> some View {
         ForEach(entries) { entry in
             DropdownRowView(
                 label: entry.name,
-                isSelected: entry.id == currentEntry?.id,
+                isSelected: entry.id == current?.id,
                 // A dashed ring, so the slot reads as "not committed yet" at a
                 // glance rather than only via the group heading above it.
                 markerSymbol: entry.isUnsaved ? "circle.dashed" : nil,
                 // The unsaved slot can always be thrown away; named palettes
                 // follow the keep-at-least-one rule.
-                onRequestDelete: (entry.isUnsaved || PaletteLibrary.canDelete(entry))
+                onRequestDelete: (entry.isUnsaved || canDeleteNamed)
                     ? { pendingDeleteEntryID = entry.id }
                     : nil,
                 isConfirmingDelete: pendingDeleteEntryID == entry.id,
@@ -1139,38 +1146,6 @@ struct SettingsView: View {
                 setPalette(entry.swatches)
                 closeDropdown()
             }
-        }
-    }
-
-    /// Only shown once a built-in has been deleted — the way back, since
-    /// deleting one is otherwise a one-way door.
-    private var restoreBuiltInsRow: some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(WatchTheme.caseInk.opacity(0.18))
-                .frame(height: 1)
-                .padding(.horizontal, 8)
-                .padding(.top, 5)
-
-            Button {
-                PaletteLibrary.restoreBuiltIns()
-                shelfChanged()
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 8, weight: .heavy))
-                    Text("restore built-ins")
-                        .font(WatchFont.body(11, weight: .semibold))
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(WatchTheme.caseInk.opacity(0.6))
-                .padding(.horizontal, 8)
-                .frame(height: 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverCursor(.pointingHand)
         }
     }
 
