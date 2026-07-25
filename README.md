@@ -1,14 +1,17 @@
 # dab
 
-A macOS menu-bar app that turns any patch of your screen into pixel art, live.
+Silly little tool to make silly little graphics. Started as an internal tool
+at the studio, but was too charming to keep it internal-only. It turns any
+patch of the screen into pixel art.
 
-Press the hotkey and a capture viewport follows your cursor, quantizing
-whatever is under it into a small grid of palette colors in real time. Click
-to save the result as an SVG. That's the whole loop: point, tune, dab.
+Fire up capture and a preview replaces your cursor. Rotate through the
+options using the shortcuts until you like what you see. Click and it gets
+saved as an SVG file. Take the SVG to your favorite graphics editor and have
+fun. Always have fun.
 
 ## How it works
 
-- **Capture** — a global hotkey (default `⌘⇧P`) opens a borderless overlay
+- **Capture** — a global hotkey (default `` ⌃⇧` ``) opens a borderless overlay
   that tracks the mouse and re-renders ~30×/s from a ScreenCaptureKit stream.
 - **Quantize** — each grid cell is matched against your palette through one of
   four filters: **Color Match** (nearest color, per-pixel voting), **Threshold**
@@ -39,6 +42,16 @@ to save the result as an SVG. That's the whole loop: point, tune, dab.
 
 Palettes are editable in Settings (up to 8 swatches, one of them optionally
 see-through), with built-in presets and room to save your own.
+
+## Palettes
+
+| Preset | Colors |
+|---|---|
+| lite brite | `#000000` `#17AE65` `#F14729` `#FDE012` `#006AFF` |
+| locker room | `#06286B` `#BD4527` `#3B829C` `#DA9678` `#B9E2F2` |
+| damiana | `#040C05` `#ED980A` `#E6D8FA` |
+| sunburn | `#0033B8` `#E12A1C` `#1E8CF0` `#FFC01F` |
+| hot glass | `#336234` `#FF9601` `#E9E9E8` |
 
 ## Install
 

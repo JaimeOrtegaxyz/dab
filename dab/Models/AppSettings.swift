@@ -218,12 +218,12 @@ final class AppSettings {
     }
 
     var hotkeyKeyCode: UInt32 {
-        get { UInt32(UserDefaults.standard.object(forKey: "hotkeyKeyCode") as? Int ?? 35) } // 35 = 'P'
+        get { UInt32(UserDefaults.standard.object(forKey: "hotkeyKeyCode") as? Int ?? 50) } // 50 = '`'
         set { UserDefaults.standard.set(Int(newValue), forKey: "hotkeyKeyCode") }
     }
 
     var hotkeyModifiers: UInt32 {
-        get { UInt32(UserDefaults.standard.object(forKey: "hotkeyModifiers") as? Int ?? 0x0300) } // Cmd+Shift (cmdKey 0x100 | shiftKey 0x200)
+        get { UInt32(UserDefaults.standard.object(forKey: "hotkeyModifiers") as? Int ?? 0x1200) } // Control+Shift (controlKey 0x1000 | shiftKey 0x200)
         set { UserDefaults.standard.set(Int(newValue), forKey: "hotkeyModifiers") }
     }
 
