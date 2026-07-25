@@ -34,6 +34,26 @@
         -->
 
         <item>
+            <title>v0.5.1</title>
+            <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.1</link>
+            <sparkle:version>0.5.1</sparkle:version>
+            <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Sat, 25 Jul 2026 06:48:23 +0000</pubDate>
+            <description><![CDATA[
+                <p>Built-in presets and your saved palettes now live in one
+                unified shelf. The default activation hotkey is now
+                Control-Shift-backtick (&#8963;&#8679;&#96;). Updated Sparkle to
+                2.9.4.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/JaimeOrtegaxyz/dab/releases/download/v0.5.1/dab-0.5.1.dmg"
+                sparkle:edSignature="dVzc90JAe893cwyfYLV91uHR+RclW5+o/8Nqtw3ApieXh0Z9RKTKTlk1kIrCM43YrTu977050+g+2/R1ww64Ag=="
+                length="2487630"
+                type="application/octet-stream" />
+        </item>
+
+        <item>
             <title>v0.5.0</title>
             <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.0</link>
             <sparkle:version>0.5.0</sparkle:version>
