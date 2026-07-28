@@ -64,6 +64,7 @@ see-through), with built-in presets and room to save your own.
 Download the latest `.dmg` from
 [Releases](https://github.com/JaimeOrtegaxyz/dab/releases), mount it, and drag
 dab to `/Applications`. The app is notarized and updates itself via Sparkle.
+See the [changelog](CHANGELOG.md) for what's new.
 
 Requires **macOS 14+** on **Apple silicon**. dab needs two permissions to
 function — **Screen Recording** (to sample pixels) and **Accessibility** (for
