@@ -66,7 +66,8 @@ Download the latest `.dmg` from
 dab to `/Applications`. The app is notarized and updates itself via Sparkle.
 See the [changelog](CHANGELOG.md) for what's new.
 
-Requires **macOS 14+** on **Apple silicon**. dab needs two permissions to
+Requires **macOS 14+** (Apple silicon and Intel — the app ships as a
+universal binary). dab needs two permissions to
 function — **Screen Recording** (to sample pixels) and **Accessibility** (for
 the overlay's keyboard controls); it prompts for both on first run.
 

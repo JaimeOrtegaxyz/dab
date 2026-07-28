@@ -48,14 +48,45 @@ if [[ ! "${VERSION}" =~ ^[0-9A-Za-z.+-]+$ ]]; then
     exit 1
 fi
 
-echo "Building ${APP_NAME} via SwiftPM..."
-swift build -c release
+# Universal (fat) build so the same app runs on Apple silicon and Intel.
+# `swift build --arch arm64 --arch x86_64` would do this in one shot, but that
+# mode requires full Xcode (xcbuild); with only Command Line Tools installed it
+# fails. So build each arch separately via --triple and lipo them together.
+echo "Building ${APP_NAME} via SwiftPM (arm64)..."
+swift build -c release --triple arm64-apple-macosx
+echo "Building ${APP_NAME} via SwiftPM (x86_64)..."
+swift build -c release --triple x86_64-apple-macosx
 
-BINARY_PATH=".build/release/${APP_NAME}"
-SPARKLE_FRAMEWORK=".build/release/Sparkle.framework"
+ARM64_BIN=".build/arm64-apple-macosx/release/${APP_NAME}"
+X86_64_BIN=".build/x86_64-apple-macosx/release/${APP_NAME}"
+BINARY_PATH=".build/${APP_NAME}-universal"
+# Sparkle ships as a prebuilt universal xcframework, so the copy in either
+# arch's build dir already contains both slices — no lipo needed for it.
+SPARKLE_FRAMEWORK=".build/arm64-apple-macosx/release/Sparkle.framework"
 
-if [[ ! -f "${BINARY_PATH}" ]]; then
-    echo "Build did not produce expected binary at ${BINARY_PATH}"
+for thin in "${ARM64_BIN}" "${X86_64_BIN}"; do
+    if [[ ! -f "${thin}" ]]; then
+        echo "Build did not produce expected binary at ${thin}"
+        exit 1
+    fi
+done
+
+echo "Creating universal binary with lipo..."
+lipo -create "${ARM64_BIN}" "${X86_64_BIN}" -output "${BINARY_PATH}"
+
+# Fail loudly if the binary somehow came out thin — an arm64-only binary here
+# would ship a release that silently won't launch on Intel Macs.
+BUILT_ARCHS="$(lipo -archs "${BINARY_PATH}")"
+if [[ "${BUILT_ARCHS}" != *x86_64* || "${BUILT_ARCHS}" != *arm64* ]]; then
+    echo "Expected a universal binary, but lipo reports: ${BUILT_ARCHS}"
+    exit 1
+fi
+
+# Fail loudly if the build somehow came out thin — an arm64-only binary here
+# would ship a release that silently won't launch on Intel Macs.
+BUILT_ARCHS="$(lipo -archs "${BINARY_PATH}")"
+if [[ "${BUILT_ARCHS}" != *x86_64* || "${BUILT_ARCHS}" != *arm64* ]]; then
+    echo "Expected a universal binary, but lipo reports: ${BUILT_ARCHS}"
     exit 1
 fi
 

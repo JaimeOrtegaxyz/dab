@@ -8,6 +8,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The app now ships as a universal binary (arm64 + x86_64), so it runs on
+  Intel Macs as well as Apple silicon.
 - Branded the DMG install window with a custom background and an app volume
   icon.
 
