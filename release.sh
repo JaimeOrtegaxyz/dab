@@ -83,15 +83,30 @@ codesign --verify --strict --verbose=2 "${APP_BUNDLE}"
 #    with "unsealed contents present in the root directory of an
 #    embedded framework". DMGs preserve the bundle byte-for-byte.
 mkdir -p dist
+
+# Build the branded window background as a HiDPI TIFF. packaging/dmg-background.png
+# is the @2x master (1360x800); we downscale a @1x rep and pack both into one TIFF
+# via tiffutil so Retina shows the crisp 2x image while the Finder window stays a
+# logical 680x400. The icon coordinates below are in those logical points: the app
+# sits at the arrow's tail, the Applications alias at its head.
+DMG_BG_SRC="packaging/dmg-background.png"
+DMG_BG_1X="dist/dmg-bg-1x.png"
+DMG_BG_TIFF="dist/dmg-bg.tiff"
+echo "==> Building DMG background TIFF"
+sips -z 400 680 "${DMG_BG_SRC}" --out "${DMG_BG_1X}" >/dev/null
+tiffutil -cathidpicheck "${DMG_BG_1X}" "${DMG_BG_SRC}" -out "${DMG_BG_TIFF}" >/dev/null 2>&1
+
 rm -f "${DMG}"
 echo "==> Building DMG with create-dmg"
 create-dmg \
     --volname "dab" \
+    --volicon "dab/Resources/AppIcon.icns" \
+    --background "${DMG_BG_TIFF}" \
     --window-pos 200 120 \
-    --window-size 600 400 \
+    --window-size 680 400 \
     --icon-size 110 \
-    --icon "${APP_BUNDLE}" 165 200 \
-    --app-drop-link 435 200 \
+    --icon "${APP_BUNDLE}" 200 205 \
+    --app-drop-link 480 205 \
     --hide-extension "${APP_BUNDLE}" \
     --no-internet-enable \
     "${DMG}" \
