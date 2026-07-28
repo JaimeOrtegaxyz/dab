@@ -34,6 +34,25 @@
         -->
 
         <item>
+            <title>v0.5.2</title>
+            <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.2</link>
+            <sparkle:version>0.5.2</sparkle:version>
+            <sparkle:shortVersionString>0.5.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Tue, 28 Jul 2026 17:28:27 +0000</pubDate>
+            <description><![CDATA[
+                <p>dab now ships as a universal binary, running natively on both
+                Intel and Apple&nbsp;silicon Macs. The DMG install window is also
+                newly branded.</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/JaimeOrtegaxyz/dab/releases/download/v0.5.2/dab-0.5.2.dmg"
+                sparkle:edSignature="x361QpN3nS9tHAMq39XG7oJje8BN3sFYJxqAoNJscSsB/f5yHSPAEZChR0WNvm2nc2dyzLtOrSoDZur8tPWpAw=="
+                length="3667103"
+                type="application/octet-stream" />
+        </item>
+
+        <item>
             <title>v0.5.1</title>
             <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.1</link>
             <sparkle:version>0.5.1</sparkle:version>
