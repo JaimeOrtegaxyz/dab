@@ -11,6 +11,10 @@ options using the shortcuts until you like what you see. Click and it gets
 saved as an SVG file. Take the SVG to your favorite graphics editor and have
 fun. Always have fun.
 
+<p align="center">
+  <img src="docs/images/dab-demo.gif" alt="dab turning a claymation flower into pixel art in real time" width="440">
+</p>
+
 ## How it works
 
 - **Capture** — a global hotkey (default `` ⌃⇧` ``) opens a borderless overlay
