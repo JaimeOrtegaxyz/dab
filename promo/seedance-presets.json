@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "provider": "byteplus-modelark",
+  "base_url": {
+    "env": "SEEDANCE_API_BASE_URL",
+    "default": "https://ark.ap-southeast.bytepluses.com/api/v3"
+  },
+  "models": {
+    "mini": {
+      "env": "SEEDANCE_MODEL_MINI",
+      "default": "dreamina-seedance-2-0-mini-260615"
+    },
+    "standard": {
+      "env": "SEEDANCE_MODEL_STANDARD",
+      "default": "dreamina-seedance-2-0-260128"
+    }
+  },
+  "presets": {
+    "coffee-shop": {
+      "production_bible": "seedance-videos.md",
+      "video_heading": "## Video 1",
+      "output_slug": "v1-coffee-shop",
+      "images": [
+        {
+          "label": "Image 1",
+          "path": "stills/v1-s1.png",
+          "role": "reference_image"
+        },
+        {
+          "label": "Image 2",
+          "path": "stills/v1-s2.png",
+          "role": "reference_image"
+        },
+        {
+          "label": "Image 3",
+          "path": "stills/v1-s3.png",
+          "role": "reference_image"
+        },
+        {
+          "label": "Image 4",
+          "path": "stills/s0-pixels.png",
+          "role": "reference_image"
+        }
+      ],
+      "duration": 12,
+      "resolution": "720p",
+      "ratio": "9:16",
+      "generate_audio": false,
+      "watermark": false,
+      "return_last_frame": true,
+      "execution_expires_after": 3600
+    }
+  }
+}

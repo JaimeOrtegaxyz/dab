@@ -1,0 +1,80 @@
+{
+  "api_base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+  "checked_at": "2026-08-03T14:34:45.694557+00:00",
+  "completed_at": "2026-08-03T02:08:46+00:00",
+  "local_outputs": {
+    "last_frame": "videos/v1-coffee-shop-mini-last-frame.jpg",
+    "video": "videos/v1-coffee-shop-mini.mp4"
+  },
+  "provider": "byteplus-modelark",
+  "request": {
+    "duration": 12,
+    "execution_expires_after": 3600,
+    "generate_audio": false,
+    "images": [
+      {
+        "bytes": 1954405,
+        "label": "Image 1",
+        "path": "stills/v1-s1.png",
+        "role": "reference_image",
+        "sha256": "403d2e3980d97f1a64bfba9605887b96739662e59a7bf7fa035a9a978b991883"
+      },
+      {
+        "bytes": 2260019,
+        "label": "Image 2",
+        "path": "stills/v1-s2.png",
+        "role": "reference_image",
+        "sha256": "e098151473201101e0454d42e5b03da4aadf4b8193f25c48299c00a1b1eb3fd5"
+      },
+      {
+        "bytes": 2152718,
+        "label": "Image 3",
+        "path": "stills/v1-s3.png",
+        "role": "reference_image",
+        "sha256": "d963d79c4615cec278d46b655a96604898781abe9a4f6d8199136f63ef6449ad"
+      },
+      {
+        "bytes": 1566393,
+        "label": "Image 4",
+        "path": "stills/s0-pixels.png",
+        "role": "reference_image",
+        "sha256": "99afdc23fd90867ad872896c8cb7c2b54b69c9c3720c7cb3604cd6607bf2a33a"
+      }
+    ],
+    "model": "dreamina-seedance-2-0-mini-260615",
+    "model_alias": "mini",
+    "preset": "coffee-shop",
+    "production_bible": "seedance-videos.md",
+    "prompt": "A woman in a tiny cartoon coffee shop holds up a paper cup to complain, and the cup erupts, drowning the whole shop in an avalanche of giant square pixels. [Image 1] as the first frame. [Image 2] as reference for the cashier's fisheye close-up. [Image 3] as reference for the flooded final shot. [Image 4] as reference for what the pixels look like. Shot 1 (0\u20133.6s): static wide, the woman thrusts the cup up at the cashier and holds it, the queue of four odd customers stands dead still, deadpan. Shot 2 (3.6\u20136.4s): slow push-in to an extreme fisheye close-up of the cashier's enormous wet eyes in a sustained side-eye, the cup reflected in them, one eyelid twitch. Shot 3 (6.4\u20138.2s): back to the wide \u2014 every head snaps back at once and the whole room laughs hysterically with huge open mouths; the woman doesn't laugh. Shot 4 (8.2\u201312s): the cup rattles, she peers into it, it erupts like a volcano and floods the shop wall-to-wall with heavy chunky square pixels; everyone flails and sinks; the surface settles calm with one thin teal-sleeved arm sticking out; hold nearly still to the end. Hand-drawn 2D indie cartoon, flat saturated color fields, wobbly ink outlines, paper grain, subtle frame jitter, deadpan pacing, 12 seconds, vertical 9:16, no text.",
+    "ratio": "9:16",
+    "resolution": "720p",
+    "return_last_frame": true,
+    "watermark": false
+  },
+  "response": {
+    "created_at": 1785722690,
+    "draft": false,
+    "duration": 12,
+    "execution_expires_after": 3600,
+    "framespersecond": 24,
+    "generate_audio": false,
+    "id": "cgt-20260803100447-p69ct",
+    "model": "dreamina-seedance-2-0-mini-260615",
+    "output_format": "mp4",
+    "priority": 0,
+    "ratio": "9:16",
+    "resolution": "720p",
+    "seed": 98892,
+    "service_tier": "default",
+    "status": "succeeded",
+    "updated_at": 1785722926,
+    "usage": {
+      "completion_tokens": 260100,
+      "total_tokens": 260100
+    }
+  },
+  "schema_version": 1,
+  "status": "succeeded",
+  "submitted_at": "2026-08-03T02:04:50+00:00",
+  "task_id": "cgt-20260803100447-p69ct"
+}
