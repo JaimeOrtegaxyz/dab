@@ -96,7 +96,7 @@ The app is not primarily about nostalgia, even though pixel aesthetics are part 
 - complex UI becomes pattern
 - a screen moment becomes a reusable visual asset
 
-The existing voice inside the app, "Turning retina displays into potato displays," is playful and self-aware. That suggests the project is comfortable being a little irreverent, but the actual product behavior is fairly precise. The tone should not drift into pure joke software. The joke opens the door; the usefulness keeps the product interesting.
+The existing voice inside the app — the slogan "Fuck yeah, pixels" — is playful and self-aware. That suggests the project is comfortable being a little irreverent, but the actual product behavior is fairly precise. The tone should not drift into pure joke software. The joke opens the door; the usefulness keeps the product interesting.
 
 ## Core User Experience
 

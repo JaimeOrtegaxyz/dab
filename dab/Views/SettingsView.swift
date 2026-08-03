@@ -667,7 +667,7 @@ struct SettingsView: View {
                 .frame(width: 56, height: 56)
                 .accessibilityLabel("dab face")
             VStack(spacing: 6) {
-                Text("turning retina displays into potato displays")
+                Text("fuck yeah, pixels")
                     .font(WatchFont.body(11, weight: .medium))
                     .foregroundStyle(WatchTheme.caseInk)
                     .multilineTextAlignment(.center)

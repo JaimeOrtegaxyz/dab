@@ -89,4 +89,6 @@ works too if you only want the binary compiled.
 
 <p align="center">
   <img src="dab/Resources/dab-logo.png" alt="dab" width="80">
+  <br>
+  <em>Fuck yeah, pixels</em>
 </p>
