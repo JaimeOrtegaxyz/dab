@@ -17,19 +17,19 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.2</string>
+	<string>0.5.3</string>
 	<key>CFBundleVersion</key>
-	<string>0.5.2</string>
+	<string>0.5.3</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>dab needs screen recording permission to capture screen content for pixelation.</string>
-	<key>SUFeedURL</key>
-	<string>https://jaimeortegaxyz.github.io/dab/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://jaimeortegaxyz.github.io/dab/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>ddj+ser3lGHovO0Om5L7Sz/TfUnrgnJL5h98jh4YxNc=</string>
 </dict>
