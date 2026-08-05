@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 4,
   "provider": "byteplus-modelark",
   "base_url": {
     "env": "SEEDANCE_API_BASE_URL",
@@ -16,36 +16,114 @@
     }
   },
   "presets": {
-    "coffee-shop": {
-      "production_bible": "seedance-videos.md",
-      "video_heading": "## Video 1",
-      "output_slug": "v1-coffee-shop",
+    "coffee-01-angry-wide": {
+      "production_spec": "storyboards/v1-coffee-shop-production.md",
+      "prompt_section": "## Pass 01 — left-hand angry wide",
+      "output_slug": "v1-coffee-p01-angry-wide",
+      "target_edit_seconds": 4.0,
+      "target_timeline": "0.0-4.0",
       "images": [
-        {
-          "label": "Image 1",
-          "path": "stills/v1-s1.png",
-          "role": "reference_image"
-        },
-        {
-          "label": "Image 2",
-          "path": "stills/v1-s2.png",
-          "role": "reference_image"
-        },
-        {
-          "label": "Image 3",
-          "path": "stills/v1-s3.png",
-          "role": "reference_image"
-        },
-        {
-          "label": "Image 4",
-          "path": "stills/s0-pixels.png",
-          "role": "reference_image"
-        }
+        {"label": "Image 1", "path": "stills/v1-a1-wide-idle.png", "role": "reference_image"},
+        {"label": "Image 2", "path": "stills/v1-a1-angry-left-hand-v1.png", "role": "reference_image"},
+        {"label": "Image 3", "path": "stills/v1-s1.png", "role": "reference_image"}
       ],
-      "duration": 12,
+      "duration": 4,
       "resolution": "720p",
       "ratio": "9:16",
-      "generate_audio": false,
+      "generate_audio": true,
+      "watermark": false,
+      "return_last_frame": true,
+      "execution_expires_after": 3600
+    },
+    "coffee-02-angry-pixels": {
+      "production_spec": "storyboards/v1-coffee-shop-production.md",
+      "prompt_section": "## Pass 02 — angry pixels close",
+      "output_slug": "v1-coffee-p02-angry-pixels",
+      "target_edit_seconds": 2.6,
+      "target_timeline": "4.0-6.6",
+      "images": [
+        {"label": "Image 1", "path": "stills/v1-a2-mabel-mumble-v3.png", "role": "reference_image"},
+        {"label": "Image 2", "path": "stills/v1-s1.png", "role": "reference_image"}
+      ],
+      "duration": 4,
+      "resolution": "720p",
+      "ratio": "9:16",
+      "generate_audio": true,
+      "watermark": false,
+      "return_last_frame": true,
+      "execution_expires_after": 3600
+    },
+    "coffee-03-pressure-clerk": {
+      "production_spec": "storyboards/v1-coffee-shop-production.md",
+      "prompt_section": "## Pass 03 — pressure clerk",
+      "output_slug": "v1-coffee-p03-pressure-clerk",
+      "target_edit_seconds": 4.0,
+      "target_timeline": "6.6-10.6",
+      "images": [
+        {"label": "Image 1", "path": "stills/v1-a3-clerk-neutral.png", "role": "reference_image"},
+        {"label": "Image 2", "path": "stills/v1-s2-v4.png", "role": "reference_image"},
+        {"label": "Image 3", "path": "stills/v1-s1.png", "role": "reference_image"}
+      ],
+      "duration": 4,
+      "resolution": "720p",
+      "ratio": "9:16",
+      "generate_audio": true,
+      "watermark": false,
+      "return_last_frame": true,
+      "execution_expires_after": 3600
+    },
+    "coffee-04-animal-laughter": {
+      "production_spec": "storyboards/v1-coffee-shop-production.md",
+      "prompt_section": "## Pass 04 — animal laughter",
+      "output_slug": "v1-coffee-p04-animal-laughter",
+      "target_edit_seconds": 3.2,
+      "target_timeline": "10.6-13.8",
+      "images": [
+        {"label": "Image 1", "path": "stills/v1-s1.png", "role": "reference_image"},
+        {"label": "Image 2", "path": "stills/v1-a4-laughter.png", "role": "reference_image"}
+      ],
+      "duration": 4,
+      "resolution": "720p",
+      "ratio": "9:16",
+      "generate_audio": true,
+      "watermark": false,
+      "return_last_frame": true,
+      "execution_expires_after": 3600
+    },
+    "coffee-05-cup-glance": {
+      "production_spec": "storyboards/v1-coffee-shop-production.md",
+      "prompt_section": "## Pass 05 — cup glance",
+      "output_slug": "v1-coffee-p05-cup-glance",
+      "target_edit_seconds": 0.7,
+      "target_timeline": "13.8-14.5",
+      "images": [
+        {"label": "Image 1", "path": "stills/v1-a5-cup-inspect.png", "role": "reference_image"},
+        {"label": "Image 2", "path": "stills/v1-a6-overhead-rain-start.png", "role": "reference_image"},
+        {"label": "Image 3", "path": "stills/s0-pixels.png", "role": "reference_image"}
+      ],
+      "duration": 4,
+      "resolution": "720p",
+      "ratio": "9:16",
+      "generate_audio": true,
+      "watermark": false,
+      "return_last_frame": true,
+      "execution_expires_after": 3600
+    },
+    "coffee-06-brick-rain": {
+      "production_spec": "storyboards/v1-coffee-shop-production.md",
+      "prompt_section": "## Pass 06 — clean-start brick rain",
+      "output_slug": "v1-coffee-p06-brick-rain",
+      "target_edit_seconds": 3.2,
+      "target_timeline": "14.5-17.7",
+      "images": [
+        {"label": "Image 1", "path": "stills/v1-a6-pre-impact-clean-v1.png", "role": "reference_image"},
+        {"label": "Image 2", "path": "stills/v1-s3.png", "role": "reference_image"},
+        {"label": "Image 3", "path": "stills/s0-pixels.png", "role": "reference_image"}
+      ],
+      "duration": 4,
+      "resolution": "720p",
+      "ratio": "9:16",
+      "generate_audio": true,
       "watermark": false,
       "return_last_frame": true,
       "execution_expires_after": 3600

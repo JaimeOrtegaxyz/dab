@@ -1,63 +1,106 @@
-# Seedance workflow
+# Seedance promo workflow
 
-This folder uses the official BytePlus ModelArk API in the AP Southeast region.
-The integration was probed and verified on 2026-08-03 with the account's
-`SEEDANCE_API_KEY`.
+This folder contains a tested modular workflow for building vertical dab promos
+with BytePlus ModelArk and Seedance 2.0. The Coffee Shop film is finished; its
+approved prompts, edit, local corrections, and lessons live in
+`storyboards/v1-coffee-shop-production.md`. Use the same production path for the
+remaining concepts in `seedance-videos.md`.
 
-## Confirmed API shape
+## Confirmed API
 
 - Base URL: `https://ark.ap-southeast.bytepluses.com/api/v3`
-- List enabled models: `GET /models`
-- Create a video task: `POST /contents/generations/tasks`
-- Retrieve a task: `GET /contents/generations/tasks/{task_id}`
-- Mini model: `dreamina-seedance-2-0-mini-260615`
-- Standard model: `dreamina-seedance-2-0-260128`
+- Enabled models: `GET /models`
+- Create task: `POST /contents/generations/tasks`
+- Read task: `GET /contents/generations/tasks/{task_id}`
+- Mini: `dreamina-seedance-2-0-mini-260615`
+- Standard: `dreamina-seedance-2-0-260128`
 - Authentication: `Authorization: Bearer $SEEDANCE_API_KEY`
 
-Reference images are sent as `content` entries with type `image_url` and role
-`reference_image`. The runner embeds local files as Base64 data URLs, which
-avoids temporary public uploads. The production bible's `@Image1` syntax is
-translated to ModelArk's `[Image 1]` syntax at request time.
+Local references are embedded as Base64 `image_url` entries with role
+`reference_image`. Prompt references such as `@Image1` are translated to
+ModelArk's `[Image 1]` syntax. Every downloaded job is stored beneath
+`videos/runs/{task_id}/` with a secret-free manifest; generated source media is
+ignored by Git.
 
-## Commands
+## Production path
 
-Run these from `promo/`:
+1. Write the complete joke and rough timing before generating video.
+2. Generate only the stills needed to describe concrete scene changes.
+3. Build a timed local animatic with small moves and exact captions.
+4. Split the approved animatic into modular Seedance passes.
+5. Give every pass a start reference. Add an end reference only when the physical
+   result or final geography truly matters.
+6. Validate prompts and inputs locally, then submit one paid Mini job at a time.
+7. Review picture, performance, sound, continuity, and usable edit window
+   separately. Replace only the failed pass.
+8. Assemble locally with hard cuts, captions, music, reusable transitions, and
+   brand outro.
+9. Repair small discontinuities locally when the source performance is otherwise
+   strong.
+10. Master and verify the final cut, then clean all obsolete review material.
+
+## Creative guardrails learned from Coffee Shop
+
+- Modular beats are more controllable than asking one generation to direct a
+  complete commercial.
+- A hard cut is often better than an unnecessary generated camera move.
+- Explicitly lock hand ownership, screen side, furniture distance, background
+  cast, and frame-zero contents.
+- Never include suspended action or motion lines in a first frame. Begin with
+  clean anticipation.
+- Unintelligible voice must still be loud and expressive. “Gibberish” works;
+  “mumbling” produces timid audio.
+- Weird sound should be physically connected to the visible event, even when its
+  material is deliberately wrong.
+- Protect the laughter, tension hold, impact speed, and aftermath. Do not shorten
+  the joke to fit an arbitrary runtime.
+- Use pupil-only or object-only dissolves, frozen stable frames, and local cuts
+  for tiny continuity repairs; full-frame dissolves create visible ghosting.
+- Keep music out of Seedance prompts. Generate scene voices and effects, then mix
+  supplied music locally.
+- Build the dab outro as an independent reusable module and transition into it
+  locally.
+
+## Safe commands
+
+Run commands from `promo/`. Validation creates no paid task:
 
 ```bash
-# Validate paths, prompt extraction, and the 64 MB request limit. No API call.
-python3 scripts/seedance.py validate coffee-shop
-
-# Optional non-billable check of the models enabled for the key.
-python3 scripts/seedance.py models
-
-# Submit one paid Mini job, wait for it, and download its outputs.
-python3 scripts/seedance.py generate coffee-shop --model mini
-
-# Inspect an existing task. Add --wait or --download when needed.
-python3 scripts/seedance.py status TASK_ID --download
+python3 scripts/seedance.py validate coffee-01-angry-wide
+python3 scripts/seedance.py validate coffee-02-angry-pixels
+python3 scripts/seedance.py validate coffee-03-pressure-clerk
+python3 scripts/seedance.py validate coffee-04-animal-laughter
+python3 scripts/seedance.py validate coffee-05-cup-glance
+python3 scripts/seedance.py validate coffee-06-brick-rain
 ```
 
-Every new job gets a unique folder at `videos/runs/{task_id}/` containing:
+The optional model-list check is also non-billable:
 
-- `video.mp4`
-- `last-frame.jpg` or `last-frame.png`
-- `job.json`, a sanitized reproducibility manifest with the prompt, settings,
-  local input paths and hashes, API status, and local output paths
+```bash
+python3 scripts/seedance.py models
+```
 
-API keys and signed output URLs are never written to job manifests.
+Submit one approved pass:
 
-## Tested coffee-shop run
+```bash
+python3 scripts/seedance.py generate coffee-04-animal-laughter --model mini
+```
 
-- Task: `cgt-20260803100447-p69ct`
-- Model: `dreamina-seedance-2-0-mini-260615`
-- Output: 12.04 seconds, 720×1280, 24 fps, silent, no watermark
-- Files: `videos/v1-coffee-shop-mini.mp4` and
-  `videos/v1-coffee-shop-mini-last-frame.jpg`
-- Sanitized request/response record:
-  `videos/runs/cgt-20260803100447-p69ct/job.json`
+Inspect, resume, or download a submitted task:
 
-Mini preserved the illustration style and cast reasonably well, but compressed
-the planned four-shot choreography: it skipped the cashier fisheye and laughter
-beats, turned the eruption into a foreground pixel pile, and reached the flooded
-arm ending only at the final moment. The next production experiment should use
-the two-generation fallback described in `seedance-videos.md`.
+```bash
+python3 scripts/seedance.py status TASK_ID --wait --download
+```
+
+Standard should be considered only after a difficult pass repeatedly fails on
+Mini and neither the references nor prompt can resolve the failure.
+
+## Repository hygiene
+
+- Commit specifications, presets, scripts, deliberately reusable source audio,
+  and approved final deliveries.
+- Keep generated Seedance clips, intermediate renders, masters, review frames,
+  diagnostic extractions, and temporary music local and ignored.
+- At approval, keep only the source passes and local intermediates used by the
+  final. Delete superseded generations, animatics, mixes, and review artifacts.
+- Never store API keys or signed output URLs in Git.

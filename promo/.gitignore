@@ -1,0 +1,19 @@
+# Local generated media. Keep source clips and intermediates on the workstation.
+videos/*.mp4
+!videos/v1-coffee-shop-full-workflow-v5-final.mp4
+videos/runs/
+
+# Audio working files and the temporary music bed remain local.
+audio/*
+!audio/source-user/
+audio/source-user/*
+!audio/source-user/fuckyeahpixels.mp3
+
+# Generated production anchors remain local unless deliberately promoted later.
+stills/v1-a*.png
+stills/v1-s2-v*.png
+
+# Review frames and approved local lockup artwork are rebuild inputs, not Git output.
+storyboards/*.jpg
+storyboards/*.png
+storyboards/*/

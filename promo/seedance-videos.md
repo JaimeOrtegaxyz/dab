@@ -1,8 +1,13 @@
-# dab — Seedance 2.0 promo videos (production bible)
+# dab — original Seedance 2.0 promo concept bible
 
 Four ~12s vertical gag videos (Seedance hard cap 15s per generation). Not product ads — absurdist jokes where "pixels" are a substance/condition in a mundane world. Tone: late-night 90s alt-cartoon block. Aesthetic lifted from `~/Downloads/ref-anim-frames` (the fly short).
 
-This file is the single source of truth. Cast, sets, shot timings, and card text below are LOCKED — an executor (Codex or otherwise) may invent prompt wording, but not contradict anything specified here.
+This file remains the concept source for Videos 2–4 and the original visual/cast
+bible for Video 1. **Do not submit the old Video 1 prompt below.** Coffee Shop
+production has been superseded by the final modular specification in
+`storyboards/v1-coffee-shop-production.md`. That document contains the approved
+passes, 26-second edit, local repairs, sound mix, reusable outro, and the process
+rules that should guide Videos 2–4.
 
 ---
 

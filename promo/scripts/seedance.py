@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Submit and retrieve Seedance jobs through BytePlus ModelArk.
 
-The production prompt stays in seedance-videos.md. This runner loads a named
-preset, embeds its local stills as Base64 image inputs, submits one asynchronous
-task, polls it, downloads the result, and writes a secret-free job manifest.
+Each production pass has a named preset and a prompt section in its current
+production specification. The runner embeds local stills as Base64 image inputs,
+submits one asynchronous task, polls it, downloads the result, and writes a
+secret-free reproducibility manifest.
 """
 
 from __future__ import annotations
@@ -103,7 +104,7 @@ def extract_seedance_prompt(markdown_path: Path, heading_prefix: str) -> str:
     if section_start is None:
         raise SeedanceError(f"Cannot find '{heading_prefix}' in {markdown_path}")
     for index in range(section_start + 1, len(lines)):
-        if lines[index].startswith("## Video "):
+        if lines[index].startswith("## "):
             section_end = index
             break
     prompt_heading: Optional[int] = None
@@ -147,8 +148,14 @@ def build_request(
     config: Dict[str, Any], preset_name: str, model_alias: str
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     preset = get_preset(config, preset_name)
-    bible_path = PROJECT_ROOT / preset["production_bible"]
-    prompt = extract_seedance_prompt(bible_path, preset["video_heading"])
+    specification = preset.get("production_spec", preset.get("production_bible"))
+    prompt_section = preset.get("prompt_section", preset.get("video_heading"))
+    if not specification or not prompt_section:
+        raise SeedanceError(
+            f"Preset '{preset_name}' must define production_spec and prompt_section"
+        )
+    specification_path = PROJECT_ROOT / specification
+    prompt = extract_seedance_prompt(specification_path, prompt_section)
     content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
     image_manifest: List[Dict[str, Any]] = []
     for image_config in preset["images"]:
@@ -184,9 +191,13 @@ def build_request(
     }
     manifest_request = {
         "preset": preset_name,
+        "output_slug": preset.get("output_slug"),
         "model_alias": model_alias,
         "model": payload["model"],
-        "production_bible": preset["production_bible"],
+        "production_spec": specification,
+        "prompt_section": prompt_section,
+        "target_edit_seconds": preset.get("target_edit_seconds"),
+        "target_timeline": preset.get("target_timeline"),
         "prompt": prompt,
         "images": image_manifest,
         "generate_audio": payload["generate_audio"],
@@ -379,6 +390,11 @@ def print_validation(manifest_request: Dict[str, Any], payload_size: int) -> Non
         f"Output: {manifest_request['duration']}s, {manifest_request['resolution']}, "
         f"{manifest_request['ratio']}, audio={manifest_request['generate_audio']}"
     )
+    if manifest_request.get("target_edit_seconds") is not None:
+        print(
+            f"Target edit: {manifest_request['target_edit_seconds']}s at "
+            f"{manifest_request.get('target_timeline', 'unspecified timeline')}"
+        )
     print(f"Images: {len(manifest_request['images'])}")
     for image in manifest_request["images"]:
         print(f"  {image['label']}: {image['path']} ({image['bytes'] / 1024 / 1024:.1f} MB)")
