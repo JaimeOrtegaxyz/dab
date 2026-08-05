@@ -553,11 +553,16 @@ struct SettingsView: View {
             return true
         }
         .contentMargins(.bottom, 12, for: .scrollIndicators)
+        // Case plastic over the transparent title bar, so rows scrolling under
+        // it disappear cleanly. Sized to the window's real safe-area inset —
+        // a hardcoded height left a see-through strip between the cover and
+        // the pinned preview on OS versions with a taller title bar.
         .overlay(alignment: .top) {
-            WatchTheme.caseYellow
-                .frame(height: WatchMetrics.titleBarHeight)
-                .frame(maxWidth: .infinity)
-                .ignoresSafeArea(edges: .top)
+            GeometryReader { proxy in
+                WatchTheme.caseYellow
+                    .frame(height: proxy.safeAreaInsets.top)
+            }
+            .ignoresSafeArea(edges: .top)
         }
         // Floating dropdown lists, drawn at the window root so they clear the
         // scroll clip and every sibling. The open chip reports its frame via

@@ -29,7 +29,6 @@ enum WatchFont {
 
 enum WatchMetrics {
     static let valueChipWidth: CGFloat = 60
-    static let titleBarHeight: CGFloat = 28
 }
 
 extension Color {
