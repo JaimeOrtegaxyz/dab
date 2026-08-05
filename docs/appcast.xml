@@ -34,6 +34,26 @@
         -->
 
         <item>
+            <title>v0.5.3</title>
+            <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.3</link>
+            <sparkle:version>0.5.3</sparkle:version>
+            <sparkle:shortVersionString>0.5.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <pubDate>Wed, 05 Aug 2026 00:55:20 +0000</pubDate>
+            <description><![CDATA[
+                <p>New slogan in Settings. The Settings title-bar cover now
+                matches the window's real title-bar height, closing a
+                see-through strip that could appear above the pinned preview.
+                Updated Sparkle to 2.9.5 (security hardening).</p>
+            ]]></description>
+            <enclosure
+                url="https://github.com/JaimeOrtegaxyz/dab/releases/download/v0.5.3/dab-0.5.3.dmg"
+                sparkle:edSignature="DDRpy3G6oP113teRiQKTyFCqLS+1hIaxUg1uqdyntipVRhF4oQZpLYlG4aV47ocpAZnfeQsmBqjRC5PEqrnnCQ=="
+                length="3667633"
+                type="application/octet-stream" />
+        </item>
+
+        <item>
             <title>v0.5.2</title>
             <link>https://github.com/JaimeOrtegaxyz/dab/releases/tag/v0.5.2</link>
             <sparkle:version>0.5.2</sparkle:version>
