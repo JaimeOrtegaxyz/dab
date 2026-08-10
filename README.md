@@ -45,6 +45,7 @@ fun. Always have fun.
 | `space` | invert |
 | `esc` | close |
 | click | save SVG and close |
+| `shift` + click | save SVG, keep capturing |
 
 Palettes are editable in Settings (up to 8 swatches, one of them optionally
 see-through), with built-in presets and room to save your own.

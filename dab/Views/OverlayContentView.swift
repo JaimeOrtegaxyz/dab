@@ -15,6 +15,9 @@ struct OverlayContentView: View {
     /// Set for a beat after `c` switches palettes, then cleared — see
     /// `CaptureViewModel.flashPaletteName`.
     let paletteFlash: String?
+    /// Set for a beat after a shift+click capture — see
+    /// `CaptureViewModel.flashSaveConfirmation`.
+    let saveFlash: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +30,10 @@ struct OverlayContentView: View {
                 Text(filterMode.shortDisplayName)
                 if let paletteFlash {
                     Text(paletteFlash)
+                        .foregroundColor(.green)
+                }
+                if let saveFlash {
+                    Text(saveFlash)
                         .foregroundColor(.green)
                 }
                 if isRandomizing {
@@ -57,6 +64,7 @@ struct OverlayContentView: View {
             .background(Color.black)
             // Fades the palette name in and back out rather than popping it.
             .animation(.easeOut(duration: 0.2), value: paletteFlash)
+            .animation(.easeOut(duration: 0.2), value: saveFlash)
         }
     }
 }

@@ -1536,6 +1536,8 @@ struct SettingsView: View {
             SilkscreenRule()
             shortcutRow("click", "save svg")
             SilkscreenRule()
+            shortcutRow("shift + click", "save svg, keep capturing")
+            SilkscreenRule()
             shortcutRow("esc", "dismiss overlay")
         }
     }
