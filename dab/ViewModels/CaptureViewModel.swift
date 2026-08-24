@@ -41,10 +41,16 @@ final class CaptureViewModel: ObservableObject {
     /// Name of the palette `c` just landed on, shown in the info bar until
     /// `paletteFlashDuration` elapses. Nil the rest of the time.
     @Published var paletteFlash: String?
+    /// Set for a beat after a shift+click capture (the one save path that
+    /// leaves the overlay open, so it needs its own confirmation), then
+    /// cleared. Nil the rest of the time.
+    @Published var saveFlash: String?
 
     private let captureService = ScreenCaptureService()
     private var paletteFlashWorkItem: DispatchWorkItem?
     private let paletteFlashDuration: TimeInterval = 1.2
+    private var saveFlashWorkItem: DispatchWorkItem?
+    private let saveFlashDuration: TimeInterval = 0.8
     private var timer: DispatchSourceTimer?
     private let captureQueue = DispatchQueue(label: "com.dab.capture", qos: .userInteractive)
     private let streamKeepAliveDuration: TimeInterval = 12
@@ -70,6 +76,7 @@ final class CaptureViewModel: ObservableObject {
         // it on capture start, even if the last session ended inside it.
         isRandomizing = false
         clearPaletteFlash()
+        clearSaveFlash()
         syncCurrentGridPresentation()
         publishSnapshot()
         isActive = true
@@ -113,6 +120,7 @@ final class CaptureViewModel: ObservableObject {
     func deactivate() {
         isActive = false
         clearPaletteFlash()
+        clearSaveFlash()
         stopCaptureLoop()
         captureService.stop(keepAliveFor: streamKeepAliveDuration)
     }
@@ -234,6 +242,25 @@ final class CaptureViewModel: ObservableObject {
         paletteFlashWorkItem?.cancel()
         paletteFlashWorkItem = nil
         paletteFlash = nil
+    }
+
+    /// Shows "saved" in the info bar, then clears it. Rapid shift+clicks
+    /// restart the timer, same as `flashPaletteName`.
+    func flashSaveConfirmation() {
+        saveFlashWorkItem?.cancel()
+        saveFlash = "saved"
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.saveFlash = nil
+        }
+        saveFlashWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + saveFlashDuration, execute: workItem)
+    }
+
+    private func clearSaveFlash() {
+        saveFlashWorkItem?.cancel()
+        saveFlashWorkItem = nil
+        saveFlash = nil
     }
 
     private func allowsKeyRepeat(for keyCode: UInt16) -> Bool {

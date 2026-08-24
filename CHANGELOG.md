@@ -4,6 +4,15 @@ All notable changes to dab are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Shift+click saves the SVG without closing the overlay, so you can take
+  a run of captures without re-invoking dab between each one. A brief
+  "saved" confirmation flashes in the info bar, and the shortcut is
+  listed in Settings under overlay shortcuts.
+
 ## [0.5.3] - 2026-08-04
 
 ### Changed

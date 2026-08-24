@@ -381,6 +381,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch type {
         case .leftMouseDown:
+            // Shift+click saves without tearing anything down, so a run of
+            // captures doesn't need the overlay re-invoked between each one.
+            // The overlay stays open, the tap stays installed; only the info
+            // bar flashes a confirmation (the plain-click path needs none —
+            // the overlay closing *is* the confirmation).
+            if event.flags.contains(.maskShift) {
+                viewModel.saveCurrentGrid()
+                viewModel.flashSaveConfirmation()
+                return nil
+            }
             viewModel.saveCurrentGrid()
             // Flip active state now, synchronously. The tap gates on `isActive`
             // (above), so leaving it true until the deferred teardown means the
@@ -440,7 +450,8 @@ struct OverlayHostView: View {
             verticalMirrorMode: viewModel.verticalMirrorMode,
             isRandomizing: viewModel.isRandomizing,
             randomVariationIndex: viewModel.randomVariationIndex,
-            paletteFlash: viewModel.paletteFlash
+            paletteFlash: viewModel.paletteFlash,
+            saveFlash: viewModel.saveFlash
         )
     }
 }
